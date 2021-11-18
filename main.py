@@ -53,7 +53,7 @@ env = simpy.Environment()
 dietician = simpy.Resource(env, 1)
 
 # Configure simulation parameters
-mean_IAT = 5
+mean_IAT = 5 
 mean_CT = 6
 
 # Make it so!
