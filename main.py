@@ -16,13 +16,13 @@ import simpy
 import random
 import configuration
 
-def send_arrivals(env, mean_IAT, mean_CT, dietician):
+def generate_patient(env, mean_IAT, mean_CT, dietician):
     token_number = 0;
 
     # run indefintely
     while(True):
         # Send an arrival onward
-        Consultation = consult_me(env, mean_CT, dietician, token_number)
+        Consultation = generate_consultation(env, mean_CT, dietician, token_number)
         env.process(Consultation) 
 
         # Generate new arrival
@@ -31,7 +31,7 @@ def send_arrivals(env, mean_IAT, mean_CT, dietician):
 
         token_number += 1
 
-def consult_me(env, mean_CT, dietician, token_number):
+def generate_consultation(env, mean_CT, dietician, token_number):
     time_arrived = env.now
     print("Patient {} entered the queue at {:.2f}".format(token_number, time_arrived))
 
@@ -57,5 +57,5 @@ mean_IAT = 5
 mean_CT = 6
 
 # Make it so!
-env.process(send_arrivals(env, mean_IAT, mean_CT, dietician))
+env.process(generate_patient(env, mean_IAT, mean_CT, dietician))
 env.run(until=540)
