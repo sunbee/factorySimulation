@@ -108,6 +108,7 @@ def process_me(env, mean_CT2register, mean_CT2triage, mean_CT2assessOutpatient, 
     print("{} HAD LEAD TIME OF {:.0f} MINUTES.".format(token_number, time_delta_start2finish))
 
     leadTimes.append(time_delta_start2finish)
+    
 # Set up the simulation environment
 env = simpy.Environment()
 
