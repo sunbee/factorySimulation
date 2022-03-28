@@ -1,6 +1,5 @@
 import simpy
 import random
-import pandas as pd
 from numpy import median
 from matplotlib import pyplot as plt
 import seaborn as sns

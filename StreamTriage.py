@@ -1,5 +1,6 @@
 import streamlit as st
 import triage_model
+import pandas as pd
 
 st.title("Simply Simpy!")
 
@@ -16,4 +17,9 @@ p = triage_model.Process()
 res = p.run_once()
 st.write(res)
 
-#st.dataframe()
+sim_runs = 30
+sim_results = []
+for i in range(0, sim_runs):
+    p = triage_model.Process()
+    sim_results.append(p.run_once())
+st.dataframe(pd.DataFrame(sim_results))
