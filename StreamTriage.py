@@ -13,6 +13,7 @@ Refer to Jupyter Notebooks for process models used in simulation here.
 - **triage**.ipynb - simulate a non-linear process of clinic with triage""")
 
 p = triage_model.Process()
-p.run()
+res = p.run_once()
+st.write(res)
 
-st.dataframe(triage_model.G.simulation_results)
+#st.dataframe()
