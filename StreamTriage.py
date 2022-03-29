@@ -23,3 +23,6 @@ for i in range(0, sim_runs):
     p = triage_model.Process()
     sim_results.append(p.run_once())
 st.dataframe(pd.DataFrame(sim_results))
+
+st.sidebar.slider("How many runs?", 30, 100)
+
