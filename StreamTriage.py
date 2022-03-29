@@ -1,6 +1,7 @@
 import streamlit as st
 import triage_model
 import pandas as pd
+from plotnine import *
 
 st.title("Simply Simpy!")
 
@@ -13,16 +14,47 @@ Refer to Jupyter Notebooks for process models used in simulation here.
 - **clinic**.ipyb - simulate a multi-step process of consultation in a medical clinic
 - **triage**.ipynb - simulate a non-linear process of clinic with triage""")
 
-p = triage_model.Process()
-res = p.run_once()
-st.write(res)
-
-sim_runs = 30
+sim_runs = st.sidebar.slider("How many runs?", 30, 100)
 sim_results = []
 for i in range(0, sim_runs):
     p = triage_model.Process()
     sim_results.append(p.run_once())
-st.dataframe(pd.DataFrame(sim_results))
+df = pd.DataFrame(sim_results)
 
-st.sidebar.slider("How many runs?", 30, 100)
+st.subheader("Queuing Times")
 
+hQ4R = ggplot(df, aes(x="Queued4Registration")) + geom_histogram()
+hQ4T = ggplot(df, aes(x="Queued4Triage")) + geom_histogram()
+
+container_one = st.container()
+col_left, col_right = st.columns(2)
+
+with container_one:
+    with col_left:
+        st.pyplot(ggplot.draw(hQ4R))
+    with col_right:
+        st.pyplot(ggplot.draw(hQ4T))
+
+hQ4O = ggplot(df, aes(x="Queued4AssessmentOPD")) + geom_histogram()
+hQ4E = ggplot(df, aes(x="Queued4AssessmentER")) + geom_histogram()
+
+container_two = st.container()
+col_left, col_right = st.columns(2)
+
+with container_two:
+    with col_left:
+        st.pyplot(ggplot.draw(hQ4O))
+    with col_right:
+        st.pyplot(ggplot.draw(hQ4E))
+
+st.subheader("Raw Data")
+
+st.dataframe(df)
+
+st.subheader("Single Run")
+
+st.write("A single run with generate metrics as follows:")
+
+p = triage_model.Process()
+res = p.run_once()
+st.write(res)

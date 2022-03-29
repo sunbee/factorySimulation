@@ -1,8 +1,6 @@
 import simpy
 import random
 from numpy import median
-from matplotlib import pyplot as plt
-import seaborn as sns
 import warnings
 
 class G:
