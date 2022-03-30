@@ -21,10 +21,17 @@ for i in range(0, sim_runs):
     sim_results.append(p.run_once())
 df = pd.DataFrame(sim_results)
 
+st.subheader("Single Run")
+
+st.write("A single run generates metrics as follows:")
+
+p = triage_model.Process()
+res = p.run_once()
+st.write(res)
 st.subheader("Queuing Times")
 
-hQ4R = ggplot(df, aes(x="Queued4Registration")) + geom_histogram()
-hQ4T = ggplot(df, aes(x="Queued4Triage")) + geom_histogram()
+hQ4R = ggplot(df, aes(x="Queued4Registration")) + geom_histogram(fill="pink", color="deeppink")
+hQ4T = ggplot(df, aes(x="Queued4Triage")) + geom_histogram(fill="pink", color="deeppink")
 
 container_one = st.container()
 col_left, col_right = st.columns(2)
@@ -35,8 +42,8 @@ with container_one:
     with col_right:
         st.pyplot(ggplot.draw(hQ4T))
 
-hQ4O = ggplot(df, aes(x="Queued4AssessmentOPD")) + geom_histogram()
-hQ4E = ggplot(df, aes(x="Queued4AssessmentER")) + geom_histogram()
+hQ4O = ggplot(df, aes(x="Queued4AssessmentOPD")) + geom_histogram(fill="pink", color="deeppink")
+hQ4E = ggplot(df, aes(x="Queued4AssessmentER")) + geom_histogram(fill="pink", color="deeppink")
 
 container_two = st.container()
 col_left, col_right = st.columns(2)
@@ -47,14 +54,24 @@ with container_two:
     with col_right:
         st.pyplot(ggplot.draw(hQ4E))
 
+hTAT = ggplot(df, aes(x="TAT")) + geom_histogram(fill="cyan", color="magenta")
+hTex = """
+### OK
+Good for you.
+Hare Krishna, Hare Krisha,
+Krishna, Krishna, Hare, Hare.
+Hare Rama, Hare Rame,
+Rama, Rama, Hare, Hare
+"""
+container_three = st.container()
+col_left, col_right = st.columns(2)
+
+with container_three:
+    with col_left:
+        st.pyplot(ggplot.draw(hTAT))
+    with col_right:
+        st.write(hTex)
+
 st.subheader("Raw Data")
 
 st.dataframe(df)
-
-st.subheader("Single Run")
-
-st.write("A single run with generate metrics as follows:")
-
-p = triage_model.Process()
-res = p.run_once()
-st.write(res)
