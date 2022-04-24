@@ -1,5 +1,6 @@
+from matplotlib.pyplot import title
 import streamlit as st
-import triage_model
+from triage_model import G, Patient, Process
 import pandas as pd
 from plotnine import *
 
@@ -15,9 +16,15 @@ Refer to Jupyter Notebooks for process models used in simulation here.
 - **triage**.ipynb - simulate a non-linear process of clinic with triage""")
 
 sim_runs = st.sidebar.slider("How many runs?", 30, 100)
+
+G.number_of_receptionists = st.sidebar.number_input("How many receptionists?", min_value=1, value=1)
+G.number_of_nurses = st.sidebar.number_input("How many nurses?", min_value=1, value=2)
+G.number_of_doctorsOPD = st.sidebar.number_input("How many doctors - OPD?", min_value=1, value=1)
+G.number_of_doctorsER = st.sidebar.number_input("How many doctors - ER?", min_value=1, value=2)
+
 sim_results = []
 for i in range(0, sim_runs):
-    p = triage_model.Process()
+    p = Process()
     sim_results.append(p.run_once())
 df = pd.DataFrame(sim_results)
 
@@ -25,13 +32,20 @@ st.subheader("Single Run")
 
 st.write("A single run generates metrics as follows:")
 
-p = triage_model.Process()
+p = Process()
 res = p.run_once()
 st.write(res)
 st.subheader("Queuing Times")
 
-hQ4R = ggplot(df, aes(x="Queued4Registration")) + geom_histogram(fill="pink", color="deeppink")
-hQ4T = ggplot(df, aes(x="Queued4Triage")) + geom_histogram(fill="pink", color="deeppink")
+hQ4R = ggplot(df, aes(x="Queued4Registration")) \
+                + geom_histogram(fill="pink", color="deeppink") \
+                + ggtitle(f"{G.number_of_receptionists} Receptionists @ REGISTRATION") \
+                + xlab("Time in queue @ Reception")
+
+hQ4T = ggplot(df, aes(x="Queued4Triage")) \
+                + geom_histogram(fill="pink", color="deeppink") \
+                + ggtitle(f"{G.number_of_nurses} Nurses @ TRIAGE") \
+                + xlab("Time in queue @ Triage")
 
 container_one = st.container()
 col_left, col_right = st.columns(2)
@@ -42,8 +56,16 @@ with container_one:
     with col_right:
         st.pyplot(ggplot.draw(hQ4T))
 
-hQ4O = ggplot(df, aes(x="Queued4AssessmentOPD")) + geom_histogram(fill="pink", color="deeppink")
-hQ4E = ggplot(df, aes(x="Queued4AssessmentER")) + geom_histogram(fill="pink", color="deeppink")
+hQ4O = ggplot(df, aes(x="Queued4AssessmentOPD")) \
+                + geom_histogram(fill="pink", color="deeppink") \
+                + ggtitle(f"{G.number_of_doctorsOPD} Doctors @ OPD") \
+                + xlab("Time in queue @ OPD") \
+                + geom_vline(xintercept=sum(df.Queued4AssessmentOPD)/len(df.Queued4AssessmentOPD))
+hQ4E = ggplot(df, aes(x="Queued4AssessmentER")) \
+                + geom_histogram(fill="pink", color="deeppink") \
+                + ggtitle(f"{G.number_of_doctorsER} Doctors @ ER") \
+                + xlab("Time in queue @ ER") \
+                + geom_vline(xintercept=sum(df.Queued4AssessmentER)/len(df.Queued4AssessmentER))
 
 container_two = st.container()
 col_left, col_right = st.columns(2)
@@ -54,14 +76,16 @@ with container_two:
     with col_right:
         st.pyplot(ggplot.draw(hQ4E))
 
-hTAT = ggplot(df, aes(x="TAT")) + geom_histogram(fill="cyan", color="magenta")
+hTAT = ggplot(df, aes(x="TAT")) \
+                + geom_histogram(fill="cyan", color="magenta") \
+                + ggtitle("LEAD TIME (END-END)") \
+                + xlab("End-End TAT") \
+                + geom_vline(xintercept=sum(df.TAT)/len(df.TAT))
 hTex = """
-### OK
-Good for you.
-Hare Krishna, Hare Krisha,
-Krishna, Krishna, Hare, Hare.
-Hare Rama, Hare Rame,
-Rama, Rama, Hare, Hare
+### Identifying Bottlenecks
+The plots show queueing times.
+Steps that have long queues forming
+before them are likely choke-points.
 """
 container_three = st.container()
 col_left, col_right = st.columns(2)
