@@ -17,10 +17,15 @@ Refer to Jupyter Notebooks for process models used in simulation here.
 
 sim_runs = st.sidebar.slider("How many runs?", 30, 100)
 
-G.number_of_receptionists = st.sidebar.number_input("How many receptionists?", min_value=1, value=1)
-G.number_of_nurses = st.sidebar.number_input("How many nurses?", min_value=1, value=2)
-G.number_of_doctorsOPD = st.sidebar.number_input("How many doctors - OPD?", min_value=1, value=1)
-G.number_of_doctorsER = st.sidebar.number_input("How many doctors - ER?", min_value=1, value=2)
+st.sidebar.subheader("Inter-Arrival Times")
+G.mean_IAT = st.sidebar.number_input("Inter-Arrival Time", min_value=1, value=8)
+
+with st.sidebar.container():
+    st.sidebar.subheader("Resources")
+    G.number_of_receptionists = st.sidebar.number_input("How many receptionists?", min_value=1, value=1)
+    G.number_of_nurses = st.sidebar.number_input("How many nurses?", min_value=1, value=2)
+    G.number_of_doctorsOPD = st.sidebar.number_input("How many doctors - OPD?", min_value=1, value=1)
+    G.number_of_doctorsER = st.sidebar.number_input("How many doctors - ER?", min_value=1, value=2)
 
 sim_results = []
 for i in range(0, sim_runs):
@@ -78,7 +83,7 @@ with container_two:
 
 hTAT = ggplot(df, aes(x="TAT")) \
                 + geom_histogram(fill="cyan", color="magenta") \
-                + ggtitle("LEAD TIME (END-END)") \
+                + ggtitle(f"LEAD TIME (END-END), IAT {G.mean_IAT}") \
                 + xlab("End-End TAT") \
                 + geom_vline(xintercept=sum(df.TAT)/len(df.TAT))
 hTex = """

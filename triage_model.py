@@ -75,7 +75,7 @@ class Process:
     def activity_generator(self, patient):      
         arrived = self.env.now
         G.arrived4process.append(arrived)
-        print("{} arrived at {:.2f}".format(patient.ID, arrived))
+        print("{} arrived at {:.2f} [IAT {}]".format(patient.ID, arrived, G.mean_IAT))
 
         # Request a receptionist for registration
         with self.receptionist.request() as req:
@@ -85,7 +85,7 @@ class Process:
             startedRegistration = self.env.now
             queuedRegistration = startedRegistration - arrived
             G.queued4registration.append(queuedRegistration)
-            print("{} started registration at {:.2f} after waiting {:.2f}".format(patient.ID, startedRegistration, queuedRegistration))
+            print("{} started registration at {:.2f} after waiting {:.2f} [#Receptionists {}]".format(patient.ID, startedRegistration, queuedRegistration, G.number_of_receptionists))
             
             deltaRegistration = random.expovariate(1.0 / G.mean_CT2register)
             yield self.env.timeout(deltaRegistration)
@@ -99,7 +99,7 @@ class Process:
             startedTriage = self.env.now
             queuedTriage = startedTriage - arrived4triage
             G.queued4triage.append(queuedTriage)
-            print("{} started triage at {:.2f} after waiting {:.2f}".format(patient.ID, startedTriage, queuedTriage))
+            print("{} started triage at {:.2f} after waiting {:.2f} [#Nurses {}]".format(patient.ID, startedTriage, queuedTriage, G.number_of_nurses))
 
             deltaTriage = random.expovariate(1.0 / G.mean_CT2triage)
             yield self.env.timeout(deltaTriage)
@@ -116,7 +116,7 @@ class Process:
                 startedAssessmentOPD = self.env.now
                 queuedAssessmentOPD = startedAssessmentOPD - arrived4assessment
                 G.queued4assessmentOPD.append(queuedAssessmentOPD)
-                print("{} started assessment in outpatient care at {} after waiting {}".format(patient.ID, startedAssessmentOPD, queuedAssessmentOPD))            
+                print("{} started assessment in outpatient care at {:.2f} after waiting {:.2f} [#Doctors OPD {}]".format(patient.ID, startedAssessmentOPD, queuedAssessmentOPD, G.number_of_doctorsOPD))            
 
                 deltaAssessmentOPD = random.expovariate(1.0 / G.mean_CT2assessOPD)
                 yield self.env.timeout(deltaAssessmentOPD)
@@ -128,7 +128,7 @@ class Process:
                 startedAssessmentER = self.env.now
                 queuedAssessmentER = startedAssessmentER - arrived4assessment
                 G.queued4assessmentER.append(queuedAssessmentER)
-                print("{} started asessment in inpatient care at {} after waiting {}".format(patient.ID, startedAssessmentER, queuedAssessmentER))
+                print("{} started asessment in inpatient care at {:.2f} after waiting {:.2f} [#Doctors ER {}]".format(patient.ID, startedAssessmentER, queuedAssessmentER, G.number_of_doctorsER))
                 
                 deltaAssessmentER = random.expovariate(1.0 / G.mean_CT2assessER)
                 yield self.env.timeout(deltaAssessmentER)
