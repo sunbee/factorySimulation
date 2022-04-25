@@ -1,6 +1,6 @@
-from matplotlib.pyplot import title
+import matplotlib.pyplot as plt
 import streamlit as st
-from triage_model import G, Patient, Process
+from triage_model import G, Patient, Process, patch_resource, get_monitor
 import pandas as pd
 from plotnine import *
 
@@ -28,9 +28,12 @@ with st.sidebar.container():
     G.number_of_doctorsER = st.sidebar.number_input("How many doctors - ER?", min_value=1, value=2)
 
 sim_results = []
+resource_monitor = []
 for i in range(0, sim_runs):
     p = Process()
     sim_results.append(p.run_once())
+    resource_monitor.append(G.resource_monitor)
+    print(G.resource_monitor)
 df = pd.DataFrame(sim_results)
 
 st.subheader("Single Run")
@@ -38,9 +41,22 @@ st.subheader("Single Run")
 st.write("A single run generates metrics as follows:")
 
 p = Process()
+p.monitor_resource(['nurse', 'doctorER'])
 res = p.run_once()
 st.write(res)
+st.write(G.resource_monitor)
 st.subheader("Queuing Times")
+
+x_nurse, y_nurse, _ = list(zip(*G.resource_monitor.get("nurse")))
+x_doctorER, y_doctorER, _ = list(zip(*G.resource_monitor.get("doctorER")))
+
+UNurse = ggplot(aes(x=x_nurse, y=y_nurse)) \
+                + geom_step() 
+st.pyplot(ggplot.draw(UNurse))
+
+UDoctorER = ggplot(aes(x=x_doctorER, y=y_doctorER)) \
+                + geom_step() 
+st.pyplot(ggplot.draw(UDoctorER))
 
 hQ4R = ggplot(df, aes(x="Queued4Registration")) \
                 + geom_histogram(fill="pink", color="deeppink") \

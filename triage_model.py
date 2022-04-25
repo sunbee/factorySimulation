@@ -1,7 +1,46 @@
+import resource
 import simpy
 import random
 from numpy import median
 import warnings
+from functools import partial, wraps
+
+def patch_resource(resource, pre=None, post=None):
+    """
+    Decorates the get/request and put/release methods of Simpy resource
+    with features for monitoring, logging the attributes with timestamp.
+    Implementation implements and extends the decorator pattern as follows:
+    1. Define a wrapper that wraps the call to resource get/put or request/release method in pre and/or post callables. 
+    2. Return the wrapper function. Note that pre and post take resource as the only argument.
+    3. Replace the resource's original methods with the decorated versions. Treat methods as attributes and get/set to update.
+    """
+    def get_wrapper(func): # func can be get/put or request/release
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if pre:
+                pre(resource)
+            
+            ret = func(*args, **kwargs) # Perform get/put or request/release operation
+
+            if post:
+                post(resource)
+
+            return ret
+        return wrapper
+
+    # Decorate original  get/put or request/release methods
+    for name in ['get', 'put', 'request', 'release']:
+        if hasattr(resource, name):
+            setattr(resource, name, get_wrapper(getattr(resource, name)))    
+
+def get_monitor(data):
+    def monitor(resource):
+        data.append((
+            resource._env.now,      # simulation timestamp
+            resource.count,         # number of consumers
+            len(resource.queue)     # number of queued processes 
+        ))
+    return monitor
 
 class G:
     """
@@ -40,6 +79,9 @@ class G:
     delta4assessmentER = []
     leadTimes = []
 
+    # Monitoring
+    resource_monitor = {}
+
 class Patient:
     """
     An entity and attributes
@@ -58,6 +100,13 @@ class Process:
         self.nurse = simpy.Resource(self.env, capacity=G.number_of_nurses)
         self.doctorOPD = simpy.Resource(self.env, capacity=G.number_of_doctorsOPD)
         self.doctorER = simpy.Resource(self.env, capacity=G.number_of_doctorsER)
+
+    def monitor_resource(self, resource_names):
+        for name in resource_names:
+            if hasattr(self, name):
+                G.resource_monitor[name] = []
+                mon_callback = get_monitor(G.resource_monitor[name])
+                patch_resource(getattr(self, name), post=mon_callback)
         
     def entity_generator(self):
         while True:
