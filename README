@@ -1,0 +1,5 @@
+Model a process in Simpy and observe in simulation.
+
+- **rev001**: Model the process in Simpy in OOP style and wrap the code in a Web UI in Streamlit.
+- **rev002**: Set up a process monitor to keep track of resource utilization.
+- **rev003**: Update process model to include unplanned downtime.
