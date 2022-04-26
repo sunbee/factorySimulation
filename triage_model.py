@@ -80,6 +80,18 @@ class G:
     # Monitoring
     resource_monitor = {}
 
+    def clear_accumulators():
+        G.arrived4process.clear()
+        G.queued4registration.clear()    
+        G.delta4registration.clear()
+        G.queued4triage.clear()
+        G.delta4triage.clear()
+        G.queued4assessmentOPD.clear()
+        G.delta4assessmentOPD.clear()
+        G.queued4assessmentER.clear()
+        G.delta4assessmentER.clear()
+        G.leadTimes.clear()
+
 class Patient:
     """
     An entity and attributes
@@ -125,9 +137,9 @@ class Process:
         print("{} arrived at {:.2f} [IAT {}]".format(patient.ID, arrived, G.mean_IAT))
 
         # Request a receptionist for registration
-        with self.receptionist.request() as req:
+        with self.receptionist.request() as req_receptionist:
             # Wait until receptionist is available
-            yield req
+            yield req_receptionist
 
             startedRegistration = self.env.now
             queuedRegistration = startedRegistration - arrived
@@ -139,9 +151,9 @@ class Process:
 
         arrived4triage = self.env.now
 
-        with self.nurse.request() as req:
+        with self.nurse.request() as req_nurse:
             # Wait until nurse is available
-            yield req
+            yield req_nurse
             
             startedTriage = self.env.now
             queuedTriage = startedTriage - arrived4triage
@@ -156,9 +168,9 @@ class Process:
         which_way = random.uniform(0, 1)
 
         if (which_way < 0.2):
-            with self.doctorOPD.request() as req:
+            with self.doctorOPD.request() as req_doctorOPD:
                 # Wait until doctor is available in outpatient care
-                yield req
+                yield req_doctorOPD
 
                 startedAssessmentOPD = self.env.now
                 queuedAssessmentOPD = startedAssessmentOPD - arrived4assessment
@@ -168,9 +180,9 @@ class Process:
                 deltaAssessmentOPD = random.expovariate(1.0 / G.mean_CT2assessOPD)
                 yield self.env.timeout(deltaAssessmentOPD)
         else:
-            with self.doctorER.request() as req:
+            with self.doctorER.request() as req_doctorER:
             # Wait until doctor is available for inpatient care
-                yield req
+                yield req_doctorER
 
                 startedAssessmentER = self.env.now
                 queuedAssessmentER = startedAssessmentER - arrived4assessment
@@ -186,12 +198,15 @@ class Process:
                 print("{} HAD LEAD TIME OF {:.0f} MINUTES.".format(patient.ID, TAT))
 
     def run_once(self):
+        # G's class-level attributes of type array will need to be reinitialized to clear history
+        G.clear_accumulators()
+
         run_result = {
-                "TAT": None,
-                "Queued4Registration": None,
-                "Queued4Triage": None,
-                "Queued4AssessmentOPD": None,
-                "Queued4AssessmentER": None
+            "TAT": None,
+            "Queued4Registration": None,
+            "Queued4Triage": None,
+            "Queued4AssessmentOPD": None,
+            "Queued4AssessmentER": None
         }
 
         # Make it so

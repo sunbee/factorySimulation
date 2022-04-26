@@ -59,8 +59,13 @@ class G:
     lead = []
 
     # Monitoring
-    resource_utilization = []  # Data from process
+    resource_utilization = {}  # Data from monitoring process
     resource_monitor = {}      # Data from monkey-patching some of a resource's methods 
+
+    def clear_accumulators():
+        G.arrived.clear()
+        G.queued.clear()
+        G.lead.clear()
 
 class Patient:
     """
@@ -109,7 +114,7 @@ class Consultation:
             started_at = self.env.now
             queued_for = started_at - arrived_at
             G.queued.append(queued_for)
-            print("Patient {} entered consultation at {:.2f}, having waited {:.2f}".format(patient.ID, arrived_at, queued_for))
+            print("Patient {} entered consultation at {:.2f}, having waited {:.2f}".format(patient.ID, started_at, queued_for))
 
             delta = random.expovariate(1.0 / G.mean_CT)
             yield self.env.timeout(delta)
@@ -119,16 +124,34 @@ class Consultation:
         G.lead.append(TAT)
         print("Patient {} exited at {:.2f}, having spent {:.2f} in clinic.".format(patient.ID, exited_at, TAT))
             
-    def run_once(self):
+    def run_once(self, proc_monitor=False):
+        G.clear_accumulators() # Clear history
+
         run_averages = {
             "queued": None,
             "lead": None,
         }
         
         self.env.process(self.generate_patient())
-        self.env.run(until=30)
+        if proc_monitor:
+            self.env.process(self.monitor_process(['dietician']))
+        self.env.run(until=G.simulation_horizon)
 
         run_averages["queued"] = sum(G.queued) / len(G.queued)
         run_averages["lead"] = sum(G.lead) / len(G.lead)
 
         return run_averages
+
+    def monitor_process(self, resource_names):
+        resources = []
+        for name in resource_names:
+            if hasattr(self, name) and isinstance(getattr(self, name), simpy.resources.resource.Resource):
+                G.resource_utilization[name] = []
+                resources.append((name, getattr(self, name)))
+        while True:
+            for rname, r in resources:
+                item = (self.env.now,
+                        r.count,
+                        len(r.queue))
+            G.resource_utilization.get(rname).append(item)
+            yield self.env.timeout(0.3)    

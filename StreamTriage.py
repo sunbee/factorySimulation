@@ -36,6 +36,7 @@ for i in range(0, sim_runs):
     print(G.resource_monitor)
 df = pd.DataFrame(sim_results)
 
+st.write(len(G.queued4triage))
 st.subheader("Single Run")
 
 st.write("A single run generates metrics as follows:")
