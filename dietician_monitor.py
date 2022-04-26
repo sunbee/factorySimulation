@@ -1,3 +1,4 @@
+import resource
 import simpy
 import random
 from numpy import median
@@ -55,10 +56,11 @@ class G:
     # Information gathering
     arrived = []
     queued = []
+    lead = []
 
     # Monitoring
-    dietician_utilization = []  # From process
-    dietician_count = []        # From monkey-patching some of a resource's methods 
+    resource_utilization = []  # Data from process
+    resource_monitor = {}      # Data from monkey-patching some of a resource's methods 
 
 class Patient:
     """
@@ -73,6 +75,13 @@ class Consultation:
         self.dietician = simpy.Resource(self.env, 1)
         self.patient_counter = 0
 
+    def monitor_resource(self, resource_names):
+        for name in resource_names:
+            if hasattr(self, name):
+                G.resource_monitor[name] = []
+                mon_callback = get_monitor(G.resource_monitor[name])
+                patch_resource(getattr(self, name), post=mon_callback)
+
     def generate_patient(self):
         # run indefintely
         while(True):
@@ -81,7 +90,7 @@ class Consultation:
             patient = Patient(self.patient_counter)
 
             # Send an arrival onward
-            Consultation = self.generate_consultation(self, patient)
+            Consultation = self.generate_consultation(patient)
             self.env.process(Consultation) 
 
             # Await new arrival
@@ -89,23 +98,37 @@ class Consultation:
             yield self.env.timeout(deltaIAT)
 
     def generate_consultation(self, patient):
-        arrived = self.env.now
-        G.arrived.append(arrived)
-        print("Patient {} entered the queue at {:.2f}".format(patient.ID, time_arrived))
+        arrived_at = self.env.now
+        G.arrived.append(arrived_at)
+        print("Patient {} entered the queue at {:.2f}".format(patient.ID, arrived_at))
 
         with self.dietician.request() as req:
             # Wait until the dietician is available
             yield req
 
-            started = self.env.now
-            queued = started - arrived
+            started_at = self.env.now
+            queued_for = started_at - arrived_at
+            G.queued.append(queued_for)
+            print("Patient {} entered consultation at {:.2f}, having waited {:.2f}".format(patient.ID, arrived_at, queued_for))
 
-            G.queued.append(queued)
-
-            delta = random.expovariate(1.0 / self.mean_CT)
-            print("Patient {} entered consultation at {:.2f}, having waited {:.2f}".format(patient.ID, arrived, queued))
+            delta = random.expovariate(1.0 / G.mean_CT)
             yield self.env.timeout(delta)
+
+        exited_at = self.env.now
+        TAT = exited_at - arrived_at
+        G.lead.append(TAT)
+        print("Patient {} exited at {:.2f}, having spent {:.2f} in clinic.".format(patient.ID, exited_at, TAT))
             
     def run_once(self):
+        run_averages = {
+            "queued": None,
+            "lead": None,
+        }
+        
         self.env.process(self.generate_patient())
         self.env.run(until=30)
+
+        run_averages["queued"] = sum(G.queued) / len(G.queued)
+        run_averages["lead"] = sum(G.lead) / len(G.lead)
+
+        return run_averages
