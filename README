@@ -3,3 +3,8 @@ Model a process in Simpy and observe in simulation.
 - **rev001**: Model the process in Simpy in OOP style and wrap the code in a Web UI in Streamlit.
 - **rev002**: Set up a process monitor to keep track of resource utilization.
 - **rev003**: Update process model to include unplanned downtime.
+
+Possible enhancements for consideration as follows:
+- Batch-processing: A step processes entities in batches. *Strategy*: Define a global array to hold entities as they are processed in the previous step. Once the array length is batch size, execute the next step and clear the array. 
+- Scheduled availability: A resource is available only at certai  times, e.g. certain days of the week.*Strategy*: Set up a process to command resources at high prority for the times they are UNAVAILABLE, thus blocking the main process from using them at these times. For example, for a hold-release-hold pattern, request resource instances in the number that are off-limits and timeout for the hold period, then release for the available period, then request again and hold. Request must be made at higher priority than the main process for the pattern to work.
+- Unplanned downtime: Unplanned downtime limits a resource availability. 
