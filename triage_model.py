@@ -1,8 +1,6 @@
-import resource
 import simpy
 import random
 from numpy import median
-import warnings
 from functools import partial, wraps
 
 def patch_resource(resource, pre=None, post=None):
