@@ -27,12 +27,18 @@ def patch_resource(resource, pre=None, post=None):
             return ret
         return wrapper
 
-    # Decorate original  get/put or request/release methods
+    # Decorate original get/put or request/release methods
     for name in ['get', 'put', 'request', 'release']:
         if hasattr(resource, name):
             setattr(resource, name, get_wrapper(getattr(resource, name)))    
 
 def get_monitor(data):
+    """
+    Query the attributes of the target resource with this callback,
+    passed to patch_resource as argument pre= or post=, depending on
+    whether to execute the callback before or after the resource's
+    get/put or request/release methods.
+    """
     def monitor(resource):
         data.append((
             resource._env.now,      # simulation timestamp
@@ -143,6 +149,10 @@ class Consultation:
         return run_averages
 
     def monitor_process(self, resource_names):
+        """
+        Generator for monitoring process that shares the environment with the main process
+        and collects information.
+        """
         resources = []
         for name in resource_names:
             if hasattr(self, name) and isinstance(getattr(self, name), simpy.resources.resource.Resource):
@@ -154,4 +164,4 @@ class Consultation:
                         r.count,
                         len(r.queue))
             G.resource_utilization.get(rname).append(item)
-            yield self.env.timeout(0.3)    
+            yield self.env.timeout(0.25)    
