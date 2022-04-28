@@ -78,7 +78,8 @@ class G:
     leadTimes = []
 
     # Monitoring
-    resource_monitor = {}
+    resource_monitor = {}       # Data from monkey-patched resource 
+    resource_utilization = {}   # Data from generator for monitoring process
 
     def clear_accumulators():
         G.arrived4process.clear()
@@ -197,7 +198,7 @@ class Process:
                 G.leadTimes.append(TAT)
                 print("{} HAD LEAD TIME OF {:.0f} MINUTES.".format(patient.ID, TAT))
 
-    def run_once(self):
+    def run_once(self, proc_monitor=False):
         # G's class-level attributes of type array will need to be reinitialized to clear history
         G.clear_accumulators()
 
@@ -211,6 +212,8 @@ class Process:
 
         # Make it so
         self.env.process(self.entity_generator())
+        if proc_monitor:
+            self.env.process(self.monitor_process(['receptionist', 'nurse', 'doctorOPD', 'doctorER']))
         self.env.run(until=G.simulation_horizon)
 
         run_result["TAT"] = sum(G.leadTimes) / len(G.leadTimes)
@@ -220,6 +223,24 @@ class Process:
         run_result["Queued4AssessmentER"] = sum(G.queued4assessmentER) / len(G.queued4assessmentER)
 
         return run_result
+   
+    def monitor_process(self, resource_names):
+        """
+        Generator for monitoring process that shares the environment with the main process
+        and collects information.
+        """
+        resources = []
+        for name in resource_names:
+            if hasattr(self, name) and isinstance(getattr(self, name), simpy.resources.resource.Resource):
+                G.resource_utilization[name] = []
+                resources.append((name, getattr(self, name)))
+        while True:
+            for rname, r in resources:
+                item = (self.env.now,
+                        r.count,
+                        len(r.queue))
+                G.resource_utilization.get(rname).append(item)
+            yield self.env.timeout(0.25)    
 
 
 

@@ -43,21 +43,35 @@ st.write("A single run generates metrics as follows:")
 
 p = Process()
 p.monitor_resource(['nurse', 'doctorER'])
-res = p.run_once()
+res = p.run_once(proc_monitor=True)
 st.write(res)
+
 st.write(G.resource_monitor)
-st.subheader("Queuing Times")
+st.write(G.resource_utilization)
 
-x_nurse, y_nurse, _ = list(zip(*G.resource_monitor.get("nurse")))
-x_doctorER, y_doctorER, _ = list(zip(*G.resource_monitor.get("doctorER")))
+st.subheader("Resource Monitor")
 
-UNurse = ggplot(aes(x=x_nurse, y=y_nurse)) \
-                + geom_step() 
-st.pyplot(ggplot.draw(UNurse))
+x_doctorOPD, y_doctorOPD, _ = list(zip(*G.resource_utilization.get("doctorOPD")))
+x_doctorER,  y_doctorER, _  = list(zip(*G.resource_utilization.get("doctorER")))
+
+UDoctorOPD = ggplot(aes(x=x_doctorOPD, y=y_doctorOPD)) \
+                + geom_step() \
+                + ggtitle("Doctor - OPD")
 
 UDoctorER = ggplot(aes(x=x_doctorER, y=y_doctorER)) \
-                + geom_step() 
-st.pyplot(ggplot.draw(UDoctorER))
+                + geom_step() \
+                + ggtitle("Doctor - ER")
+
+container_A = st.container()
+col_AL, col_AR = st.columns(2)
+
+with container_A:
+    with col_AL:
+        st.pyplot(ggplot.draw(UDoctorOPD))
+    with col_AR:
+        st.pyplot(ggplot.draw(UDoctorER))
+
+st.subheader("Queuing Times")
 
 hQ4R = ggplot(df, aes(x="Queued4Registration")) \
                 + geom_histogram(fill="pink", color="deeppink") \

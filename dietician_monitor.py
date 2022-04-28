@@ -65,7 +65,7 @@ class G:
     lead = []
 
     # Monitoring
-    resource_utilization = {}  # Data from monitoring process
+    resource_utilization = {}  # Data from genertor for process monitoring 
     resource_monitor = {}      # Data from monkey-patching some of a resource's methods 
 
     def clear_accumulators():
@@ -87,11 +87,28 @@ class Consultation:
         self.patient_counter = 0
 
     def monitor_resource(self, resource_names):
+        """
+        USE THE MONKEY-PATCHED RESOURCE FOR MONITORING RESOURCE UTILIZATION
+        Gets the callback with 'get_monitor()' 
+        and executes monkey-patching resource with 'patch_resource()`
+        """
         for name in resource_names:
             if hasattr(self, name):
                 G.resource_monitor[name] = []
                 mon_callback = get_monitor(G.resource_monitor[name])
                 patch_resource(getattr(self, name), post=mon_callback)
+
+    def help_monitor(self, resource_name, ts):
+        """
+        Fix the gap with monkey-patching missing entity served after a delay
+        while another entity was being processed.
+        """
+        if (resource_name in G.resource_monitor) \
+            and (G.resource_monitor.get(resource_name)[-1][0] == ts) \
+            and (G.resource_monitor.get(resource_name)[-1][-1] > 0):
+            item = list(G.resource_monitor.get(resource_name).pop(-1))
+            item[1] += 1; item[2] -= 1 
+            G.resource_monitor.get(resource_name).append(tuple(item))
 
     def generate_patient(self):
         # run indefintely
@@ -118,6 +135,7 @@ class Consultation:
             yield req
 
             started_at = self.env.now
+            self.help_monitor('dietician', started_at)
             queued_for = started_at - arrived_at
             G.queued.append(queued_for)
             print("Patient {} entered consultation at {:.2f}, having waited {:.2f}".format(patient.ID, started_at, queued_for))
@@ -125,10 +143,10 @@ class Consultation:
             delta = random.expovariate(1.0 / G.mean_CT)
             yield self.env.timeout(delta)
 
-        exited_at = self.env.now
-        TAT = exited_at - arrived_at
-        G.lead.append(TAT)
-        print("Patient {} exited at {:.2f}, having spent {:.2f} in clinic.".format(patient.ID, exited_at, TAT))
+            exited_at = self.env.now
+            TAT = exited_at - arrived_at
+            G.lead.append(TAT)
+            print("Patient {} exited at {:.2f}, having spent {:.2f} in clinic.".format(patient.ID, exited_at, TAT))
             
     def run_once(self, proc_monitor=False):
         G.clear_accumulators() # Clear history
@@ -143,8 +161,8 @@ class Consultation:
             self.env.process(self.monitor_process(['dietician']))
         self.env.run(until=G.simulation_horizon)
 
-        run_averages["queued"] = sum(G.queued) / len(G.queued)
-        run_averages["lead"] = sum(G.lead) / len(G.lead)
+        run_averages["queued"] = sum(G.queued) / len(G.queued) if len(G.queued) > 0 else None
+        run_averages["lead"] = sum(G.lead) / len(G.lead) if len(G.lead) > 0 else None
 
         return run_averages
 
@@ -163,5 +181,5 @@ class Consultation:
                 item = (self.env.now,
                         r.count,
                         len(r.queue))
-            G.resource_utilization.get(rname).append(item)
+                G.resource_utilization.get(rname).append(item)
             yield self.env.timeout(0.25)    
