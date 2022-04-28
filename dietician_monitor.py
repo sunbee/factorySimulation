@@ -100,8 +100,14 @@ class Consultation:
 
     def help_monitor(self, resource_name, ts):
         """
-        Fix the gap with monkey-patching missing entity served after a delay
-        while another entity was being processed.
+        Fix the gap with monkey-patching missing to record capacity allocated
+        to an entity that is served after a delay. This happens when an entity
+        is waiting in queue while another entity is being processed. 
+        Modifies the list that where data are logged from the monkey-patched 
+        resource. Call this function as soon as capacity is allocated, 
+        i.e. after 'yield req'. Compares the timestamp of capacity allocation 
+        with the timestamp of the most recent element on the list and if same, 
+        pops the item and puts it back after modification. 
         """
         if (resource_name in G.resource_monitor) \
             and (G.resource_monitor.get(resource_name)[-1][0] == ts) \
