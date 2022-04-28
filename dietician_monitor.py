@@ -7,7 +7,8 @@ from functools import partial, wraps
 def patch_resource(resource, pre=None, post=None):
     """
     Decorates the get/request and put/release methods of Simpy resource
-    with features for monitoring, logging the attributes with timestamp.
+    with features for monitoring, logging resource attributes with timestamp
+    when these methods are called.
     Implementation implements and extends the decorator pattern as follows:
     1. Define a wrapper that wraps the call to resource get/put or request/release method in pre and/or post callables. 
     2. Return the wrapper function. Note that pre and post take resource as the only argument.
@@ -34,10 +35,10 @@ def patch_resource(resource, pre=None, post=None):
 
 def get_monitor(data):
     """
-    Query the attributes of the target resource with this callback,
-    passed to patch_resource as argument pre= or post=, depending on
+    Query the attributes of the target resource with this callback.
+    Passed to patch_resource as argument pre= or post=, depending on
     whether to execute the callback before or after the resource's
-    get/put or request/release methods.
+    get/put or request/release method calls.
     """
     def monitor(resource):
         data.append((
@@ -104,8 +105,8 @@ class Consultation:
         to an entity that is served after a delay. This happens when an entity
         is waiting in queue while another entity is being processed. 
         Modifies the list that where data are logged from the monkey-patched 
-        resource. Call this function as soon as capacity is allocated, 
-        i.e. after 'yield req'. Compares the timestamp of capacity allocation 
+        resource. Call this function right after capacity is allocated,
+        i.e. right after 'yield req'. Compares the timestamp of capacity allocation 
         with the timestamp of the most recent element on the list and if same, 
         pops the item and puts it back after modification. 
         """
