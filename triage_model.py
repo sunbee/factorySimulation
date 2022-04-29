@@ -6,7 +6,8 @@ from functools import partial, wraps
 def patch_resource(resource, pre=None, post=None):
     """
     Decorates the get/request and put/release methods of Simpy resource
-    with features for monitoring, logging the attributes with timestamp.
+    with features for monitoring, logging resource attributes with timestamp
+    when these methods are called.
     Implementation implements and extends the decorator pattern as follows:
     1. Define a wrapper that wraps the call to resource get/put or request/release method in pre and/or post callables. 
     2. Return the wrapper function. Note that pre and post take resource as the only argument.
@@ -39,6 +40,14 @@ def get_monitor(data):
             len(resource.queue)     # number of queued processes 
         ))
     return monitor
+
+def help_monitor(resource_name, ts):
+    if (resource_name in G.resource_monitor) \
+        and (G.resource_monitor.get(resource_name)[-1][0] == ts) \
+        and (G.resource_monitor.get(resource_name)[-1][-1] > 0):
+        item = list(G.resource_monitor.get(resource_name).pop(-1))
+        item[1] += 1; item[2] -= 1 
+        G.resource_monitor.get(resource_name).append(tuple(item))
 
 class G:
     """
@@ -112,7 +121,8 @@ class Process:
         self.doctorOPD = simpy.Resource(self.env, capacity=G.number_of_doctorsOPD)
         self.doctorER = simpy.Resource(self.env, capacity=G.number_of_doctorsER)
 
-    def monitor_resource(self, resource_names):
+    def monitor_resource(self):
+        resource_names = ['receptionist', 'nurse', 'doctorOPD', 'doctorER']
         for name in resource_names:
             if hasattr(self, name):
                 G.resource_monitor[name] = []
@@ -143,6 +153,7 @@ class Process:
             yield req_receptionist
 
             startedRegistration = self.env.now
+            help_monitor('receptionist', startedRegistration)
             queuedRegistration = startedRegistration - arrived
             G.queued4registration.append(queuedRegistration)
             print("{} started registration at {:.2f} after waiting {:.2f} [#Receptionists {}]".format(patient.ID, startedRegistration, queuedRegistration, G.number_of_receptionists))
@@ -157,6 +168,7 @@ class Process:
             yield req_nurse
             
             startedTriage = self.env.now
+            help_monitor('nurse', startedTriage)
             queuedTriage = startedTriage - arrived4triage
             G.queued4triage.append(queuedTriage)
             print("{} started triage at {:.2f} after waiting {:.2f} [#Nurses {}]".format(patient.ID, startedTriage, queuedTriage, G.number_of_nurses))
@@ -174,6 +186,7 @@ class Process:
                 yield req_doctorOPD
 
                 startedAssessmentOPD = self.env.now
+                help_monitor('doctorOPD', startedAssessmentOPD)
                 queuedAssessmentOPD = startedAssessmentOPD - arrived4assessment
                 G.queued4assessmentOPD.append(queuedAssessmentOPD)
                 print("{} started assessment in outpatient care at {:.2f} after waiting {:.2f} [#Doctors OPD {}]".format(patient.ID, startedAssessmentOPD, queuedAssessmentOPD, G.number_of_doctorsOPD))            
@@ -186,6 +199,7 @@ class Process:
                 yield req_doctorER
 
                 startedAssessmentER = self.env.now
+                help_monitor('doctorER', startedAssessmentER)
                 queuedAssessmentER = startedAssessmentER - arrived4assessment
                 G.queued4assessmentER.append(queuedAssessmentER)
                 print("{} started asessment in inpatient care at {:.2f} after waiting {:.2f} [#Doctors ER {}]".format(patient.ID, startedAssessmentER, queuedAssessmentER, G.number_of_doctorsER))

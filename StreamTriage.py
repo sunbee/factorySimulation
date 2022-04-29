@@ -13,9 +13,8 @@ Refer to Jupyter Notebooks for process models used in simulation here.
 - **generator**.ipynb - use a generator function to meet concurrency needs of process simulation
 - **dietician**.ipynb - simulate a one-step process of dietary consultation
 - **clinic**.ipyb - simulate a multi-step process of consultation in a medical clinic
-- **triage**.ipynb - simulate a non-linear process of clinic with triage""")
-
-sim_runs = st.sidebar.slider("How many runs?", 30, 100)
+- **triage**.ipynb - simulate a non-linear process of clinic with triage
+- **dietician_monitor**.ipynb - simulate a one-step process with monitoring using package **dietician_monitor.py**""")
 
 st.sidebar.subheader("Inter-Arrival Times")
 G.mean_IAT = st.sidebar.number_input("Inter-Arrival Time", min_value=1, value=8)
@@ -27,29 +26,37 @@ with st.sidebar.container():
     G.number_of_doctorsOPD = st.sidebar.number_input("How many doctors - OPD?", min_value=1, value=1)
     G.number_of_doctorsER = st.sidebar.number_input("How many doctors - ER?", min_value=1, value=2)
 
-sim_results = []
-resource_monitor = []
-for i in range(0, sim_runs):
-    p = Process()
-    sim_results.append(p.run_once())
-    resource_monitor.append(G.resource_monitor)
-    print(G.resource_monitor)
-df = pd.DataFrame(sim_results)
-
-st.write(len(G.queued4triage))
-st.subheader("Single Run")
-
-st.write("A single run generates metrics as follows:")
+st.subheader("Single Run: Summary")
 
 p = Process()
-p.monitor_resource(['nurse', 'doctorER'])
+p.monitor_resource()
 res = p.run_once(proc_monitor=True)
 st.write(res)
+
+st.subheader("Single Run: Resource Monitor")
 
 st.write(G.resource_monitor)
 st.write(G.resource_utilization)
 
-st.subheader("Resource Monitor")
+x_doctorOPD_, y_doctorOPD_, _ = list(zip(*G.resource_monitor.get("doctorOPD")))
+x_doctorER_,  y_doctorER_, _  = list(zip(*G.resource_monitor.get("doctorER")))
+
+UDoctorOPD_ = ggplot(aes(x=x_doctorOPD_, y=y_doctorOPD_)) \
+                + geom_step() \
+                + ggtitle("Doctor - OPD")
+
+UDoctorER_ = ggplot(aes(x=x_doctorER_, y=y_doctorER_)) \
+                + geom_step() \
+                + ggtitle("Doctor - ER")
+
+container_B = st.container()
+col_BL, col_BR = st.columns(2)
+
+with container_B:
+    with col_BL:
+        st.pyplot(ggplot.draw(UDoctorOPD_))
+    with col_BR:
+        st.pyplot(ggplot.draw(UDoctorER_))
 
 x_doctorOPD, y_doctorOPD, _ = list(zip(*G.resource_utilization.get("doctorOPD")))
 x_doctorER,  y_doctorER, _  = list(zip(*G.resource_utilization.get("doctorER")))
@@ -71,7 +78,20 @@ with container_A:
     with col_AR:
         st.pyplot(ggplot.draw(UDoctorER))
 
-st.subheader("Queuing Times")
+sim_runs = st.sidebar.slider("How many runs?", 30, 100)
+
+st.subheader("Multiple Runs: Queuing Times")
+
+sim_results = []
+resource_monitor = []
+for i in range(0, sim_runs):
+    p = Process()
+    sim_results.append(p.run_once())
+    resource_monitor.append(G.resource_monitor)
+    print(G.resource_monitor)
+df = pd.DataFrame(sim_results)
+
+st.write(len(G.queued4triage))
 
 hQ4R = ggplot(df, aes(x="Queued4Registration")) \
                 + geom_histogram(fill="pink", color="deeppink") \

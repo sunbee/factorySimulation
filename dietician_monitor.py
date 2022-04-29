@@ -48,6 +48,24 @@ def get_monitor(data):
         ))
     return monitor
 
+def help_monitor(resource_name, ts):
+    """
+    Fix the gap with monkey-patching missing to record capacity allocated
+    to an entity that is served after a delay. This happens when an entity
+    is waiting in queue while another entity is being processed. 
+    Modifies the list that where data are logged from the monkey-patched 
+    resource. Call this function right after capacity is allocated,
+    i.e. right after 'yield req'. Compares the timestamp of capacity allocation 
+    with the timestamp of the most recent element on the list and if same, 
+    pops the item and puts it back after modification. 
+    """
+    if (resource_name in G.resource_monitor) \
+        and (G.resource_monitor.get(resource_name)[-1][0] == ts) \
+        and (G.resource_monitor.get(resource_name)[-1][-1] > 0):
+        item = list(G.resource_monitor.get(resource_name).pop(-1))
+        item[1] += 1; item[2] -= 1 
+        G.resource_monitor.get(resource_name).append(tuple(item))
+
 class G:
     # Simulation settings
     number_of_runs = 30
@@ -87,35 +105,18 @@ class Consultation:
         self.dietician = simpy.Resource(self.env, 1)
         self.patient_counter = 0
 
-    def monitor_resource(self, resource_names):
+    def monitor_resource(self):
         """
         USE THE MONKEY-PATCHED RESOURCE FOR MONITORING RESOURCE UTILIZATION
         Gets the callback with 'get_monitor()' 
         and executes monkey-patching resource with 'patch_resource()`
         """
+        resource_names=['dietician']
         for name in resource_names:
             if hasattr(self, name):
                 G.resource_monitor[name] = []
                 mon_callback = get_monitor(G.resource_monitor[name])
                 patch_resource(getattr(self, name), post=mon_callback)
-
-    def help_monitor(self, resource_name, ts):
-        """
-        Fix the gap with monkey-patching missing to record capacity allocated
-        to an entity that is served after a delay. This happens when an entity
-        is waiting in queue while another entity is being processed. 
-        Modifies the list that where data are logged from the monkey-patched 
-        resource. Call this function right after capacity is allocated,
-        i.e. right after 'yield req'. Compares the timestamp of capacity allocation 
-        with the timestamp of the most recent element on the list and if same, 
-        pops the item and puts it back after modification. 
-        """
-        if (resource_name in G.resource_monitor) \
-            and (G.resource_monitor.get(resource_name)[-1][0] == ts) \
-            and (G.resource_monitor.get(resource_name)[-1][-1] > 0):
-            item = list(G.resource_monitor.get(resource_name).pop(-1))
-            item[1] += 1; item[2] -= 1 
-            G.resource_monitor.get(resource_name).append(tuple(item))
 
     def generate_patient(self):
         # run indefintely
@@ -142,7 +143,7 @@ class Consultation:
             yield req
 
             started_at = self.env.now
-            self.help_monitor('dietician', started_at)
+            help_monitor('dietician', started_at)
             queued_for = started_at - arrived_at
             G.queued.append(queued_for)
             print("Patient {} entered consultation at {:.2f}, having waited {:.2f}".format(patient.ID, started_at, queued_for))
