@@ -221,7 +221,11 @@ class Process:
             "Queued4Registration": None,
             "Queued4Triage": None,
             "Queued4AssessmentOPD": None,
-            "Queued4AssessmentER": None
+            "Queued4AssessmentER": None,
+            "PercUtilizationReceptionist": None,
+            "PercUtilizationNurse": None,
+            "PercUtilizationDoctorOPD": None,
+            "PercUtilizationDoctorER": None
         }
 
         # Make it so
