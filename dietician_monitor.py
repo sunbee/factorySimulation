@@ -1,7 +1,7 @@
 import resource
 import simpy
 import random
-from numpy import median
+from numpy import median, trapz
 from functools import partial, wraps
 
 def patch_resource(resource, pre=None, post=None):
@@ -162,6 +162,7 @@ class Consultation:
         run_averages = {
             "queued": None,
             "lead": None,
+            "utilization": None
         }
         
         self.env.process(self.generate_patient())
@@ -171,6 +172,10 @@ class Consultation:
 
         run_averages["queued"] = sum(G.queued) / len(G.queued) if len(G.queued) > 0 else None
         run_averages["lead"] = sum(G.lead) / len(G.lead) if len(G.lead) > 0 else None
+        x_monitr, y_monitr, _ = list(zip(*G.resource_utilization['dietician']))
+        avaUtil = G.number_of_dieticians * x_monitr[-1]
+        netUtil = trapz(y_monitr, x_monitr)     
+        run_averages["utilization"] = netUtil / avaUtil
 
         return run_averages
 
