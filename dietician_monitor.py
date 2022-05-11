@@ -172,10 +172,11 @@ class Consultation:
 
         run_averages["queued"] = sum(G.queued) / len(G.queued) if len(G.queued) > 0 else None
         run_averages["lead"] = sum(G.lead) / len(G.lead) if len(G.lead) > 0 else None
-        x_monitr, y_monitr, _ = list(zip(*G.resource_utilization['dietician']))
-        avaUtil = G.number_of_dieticians * x_monitr[-1]
-        netUtil = trapz(y_monitr, x_monitr)     
-        run_averages["utilization"] = netUtil / avaUtil
+        G_resource = G.resource_monitor
+        if proc_monitor:
+            G_resource = G.resource_utilization  
+        x_r, y_r, _ = list(zip(*G_resource['dietician']))    
+        run_averages["utilization"] = trapz(y_r, x_r) / (G.number_of_dieticians * x_r[-1])
 
         return run_averages
 

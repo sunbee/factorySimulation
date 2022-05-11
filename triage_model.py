@@ -1,6 +1,6 @@
 import simpy
 import random
-from numpy import median
+from numpy import median, trapz
 from functools import partial, wraps
 
 def patch_resource(resource, pre=None, post=None):
@@ -42,12 +42,12 @@ def get_monitor(data):
     return monitor
 
 def help_monitor(resource_name, ts):
-    if (resource_name in G.resource_monitor) \
-        and (G.resource_monitor.get(resource_name)[-1][0] == ts) \
-        and (G.resource_monitor.get(resource_name)[-1][-1] > 0):
-        item = list(G.resource_monitor.get(resource_name).pop(-1))
+    if (resource_name in G.utilization_event) \
+        and (G.utilization_event.get(resource_name)[-1][0] == ts) \
+        and (G.utilization_event.get(resource_name)[-1][-1] > 0):
+        item = list(G.utilization_event.get(resource_name).pop(-1))
         item[1] += 1; item[2] -= 1 
-        G.resource_monitor.get(resource_name).append(tuple(item))
+        G.utilization_event.get(resource_name).append(tuple(item))
 
 class G:
     """
@@ -60,13 +60,16 @@ class G:
     # Simulation settings
     number_runs = 30
     simulation_horizon = 540
+    verbose = False
 
     # Resourcing
-    number_of_receptionists = 1
-    number_of_nurses = 2
-    number_of_doctorsOPD = 1
-    number_of_doctorsER = 2
-
+    resource_types = ['receptionist', 'nurse', 'doctorOPD', 'doctorER']
+    resource_capacity = {}
+    resource_capacity["receptionist"] = 1
+    resource_capacity["nurse"] = 2
+    resource_capacity["doctorOPD"] = 1
+    resource_capacity["doctorER"] = 2
+ 
     # Model paramters
     mean_IAT = 8
     mean_CT2register = 2
@@ -75,32 +78,13 @@ class G:
     mean_CT2assessER = 30
 
     # Information gathering
-    arrived4process = []
-    queued4registration = []    
-    delta4registration = []
-    queued4triage = []
-    delta4triage = []
-    queued4assessmentOPD = []
-    delta4assessmentOPD = []
-    queued4assessmentER = []
-    delta4assessmentER = []
-    leadTimes = []
+    arrival_ts = []         # Entity arrival times in a single run
+    queued = {}             # Queueing times in a single run, step-wise (Use type of resource as key to extract data for that step)
+    delta = {}              # Processing times in a single run, step-wise (Use type of resource as key to extract data for that step)
 
-    # Monitoring
-    resource_monitor = {}       # Data from monkey-patched resource 
-    resource_utilization = {}   # Data from generator for monitoring process
-
-    def clear_accumulators():
-        G.arrived4process.clear()
-        G.queued4registration.clear()    
-        G.delta4registration.clear()
-        G.queued4triage.clear()
-        G.delta4triage.clear()
-        G.queued4assessmentOPD.clear()
-        G.delta4assessmentOPD.clear()
-        G.queued4assessmentER.clear()
-        G.delta4assessmentER.clear()
-        G.leadTimes.clear()
+    # Resource Monitoring
+    utilization_event = {}  # Data from monkey-patched resource, single run
+    utilization_poll = {}   # Data from generator for polling resource stats, single run
 
 class Patient:
     """
@@ -116,20 +100,22 @@ class Process:
     def __init__(self) -> None:
         self.env = simpy.Environment()
         self.patient_counter = 0
-        self.receptionist = simpy.Resource(self.env, capacity=G.number_of_receptionists)
-        self.nurse = simpy.Resource(self.env, capacity=G.number_of_nurses)
-        self.doctorOPD = simpy.Resource(self.env, capacity=G.number_of_doctorsOPD)
-        self.doctorER = simpy.Resource(self.env, capacity=G.number_of_doctorsER)
+        self.resources = {}
+        for resource_type in G.resource_types:
+            self.resources[resource_type] = simpy.Resource(self.env, G.resource_capacity.get(resource_type))
 
-    def monitor_resource(self):
-        resource_names = ['receptionist', 'nurse', 'doctorOPD', 'doctorER']
-        for name in resource_names:
-            if hasattr(self, name):
-                G.resource_monitor[name] = []
-                mon_callback = get_monitor(G.resource_monitor[name])
-                patch_resource(getattr(self, name), post=mon_callback)
-        
+    def monitor_capacity(self):
+        for resource_type in self.resources.keys():
+            G.utilization_event[resource_type] = []
+            mon_callback = get_monitor(G.utilization_event[resource_type])
+            patch_resource(self.resources[resource_type], post=mon_callback)
+    
     def entity_generator(self):
+        G.arrival_ts.clear()
+        for resource_type in G.resource_types:
+            G.queued[resource_type] = []
+            G.delta[resource_type] = []
+        G.delta["TAT"] = []  # Accounting for Turn-Around Time (TAT) per entity for end-end process
         while True:
             self.patient_counter += 1
             patient = Patient(self.patient_counter)
@@ -144,36 +130,36 @@ class Process:
 
     def activity_generator(self, patient):      
         arrived = self.env.now
-        G.arrived4process.append(arrived)
-        print("{} arrived at {:.2f} [IAT {}]".format(patient.ID, arrived, G.mean_IAT))
+        G.arrival_ts.append(arrived)
+        print("{} arrived at {:.2f} [IAT {}]".format(patient.ID, arrived, G.mean_IAT)) if G.verbose else None
 
         # Request a receptionist for registration
-        with self.receptionist.request() as req_receptionist:
+        with self.resources["receptionist"].request() as req_receptionist:
             # Wait until receptionist is available
             yield req_receptionist
 
             startedRegistration = self.env.now
             help_monitor('receptionist', startedRegistration)
-            queuedRegistration = startedRegistration - arrived
-            G.queued4registration.append(queuedRegistration)
-            print("{} started registration at {:.2f} after waiting {:.2f} [#Receptionists {}]".format(patient.ID, startedRegistration, queuedRegistration, G.number_of_receptionists))
+            G.queued["receptionist"].append(startedRegistration - arrived)
+            print("{} started registration at {:.2f} after waiting {:.2f} [#Receptionists {}]".format(patient.ID, startedRegistration, startedRegistration - arrived, G.resource_capacity["receptionist"])) if G.verbose else None
             
             deltaRegistration = random.expovariate(1.0 / G.mean_CT2register)
+            G.delta["receptionist"].append(deltaRegistration)
             yield self.env.timeout(deltaRegistration)
 
         arrived4triage = self.env.now
 
-        with self.nurse.request() as req_nurse:
+        with self.resources["nurse"].request() as req_nurse:
             # Wait until nurse is available
             yield req_nurse
             
             startedTriage = self.env.now
             help_monitor('nurse', startedTriage)
-            queuedTriage = startedTriage - arrived4triage
-            G.queued4triage.append(queuedTriage)
-            print("{} started triage at {:.2f} after waiting {:.2f} [#Nurses {}]".format(patient.ID, startedTriage, queuedTriage, G.number_of_nurses))
+            G.queued["nurse"].append(startedTriage - arrived4triage)
+            print("{} started triage at {:.2f} after waiting {:.2f} [#Nurses {}]".format(patient.ID, startedTriage, startedTriage - arrived4triage, G.resource_capacity["nurse"])) if G.verbose else None
 
             deltaTriage = random.expovariate(1.0 / G.mean_CT2triage)
+            G.delta["nurse"].append(deltaTriage)
             yield self.env.timeout(deltaTriage)
 
         arrived4assessment = self.env.now
@@ -181,83 +167,75 @@ class Process:
         which_way = random.uniform(0, 1)
 
         if (which_way < 0.2):
-            with self.doctorOPD.request() as req_doctorOPD:
+            with self.resources["doctorOPD"].request() as req_doctorOPD:
                 # Wait until doctor is available in outpatient care
                 yield req_doctorOPD
 
                 startedAssessmentOPD = self.env.now
                 help_monitor('doctorOPD', startedAssessmentOPD)
-                queuedAssessmentOPD = startedAssessmentOPD - arrived4assessment
-                G.queued4assessmentOPD.append(queuedAssessmentOPD)
-                print("{} started assessment in outpatient care at {:.2f} after waiting {:.2f} [#Doctors OPD {}]".format(patient.ID, startedAssessmentOPD, queuedAssessmentOPD, G.number_of_doctorsOPD))            
+                G.queued["doctorOPD"].append(startedAssessmentOPD - arrived4assessment)
+                print("{} started assessment in outpatient care at {:.2f} after waiting {:.2f} [#Doctors OPD {}]".format(patient.ID, startedAssessmentOPD, startedAssessmentOPD - arrived4assessment, G.resource_capacity["doctorOPD"])) if G.verbose else None          
 
                 deltaAssessmentOPD = random.expovariate(1.0 / G.mean_CT2assessOPD)
+                G.delta["doctorOPD"].append(deltaAssessmentOPD)
                 yield self.env.timeout(deltaAssessmentOPD)
         else:
-            with self.doctorER.request() as req_doctorER:
+            with self.resources["doctorER"].request() as req_doctorER:
             # Wait until doctor is available for inpatient care
                 yield req_doctorER
 
                 startedAssessmentER = self.env.now
                 help_monitor('doctorER', startedAssessmentER)
-                queuedAssessmentER = startedAssessmentER - arrived4assessment
-                G.queued4assessmentER.append(queuedAssessmentER)
-                print("{} started asessment in inpatient care at {:.2f} after waiting {:.2f} [#Doctors ER {}]".format(patient.ID, startedAssessmentER, queuedAssessmentER, G.number_of_doctorsER))
+                G.queued["doctorER"].append(startedAssessmentER - arrived4assessment)
+                print("{} started asessment in inpatient care at {:.2f} after waiting {:.2f} [#Doctors ER {}]".format(patient.ID, startedAssessmentER, startedAssessmentER - arrived4assessment, G.resource_capacity["doctorER"])) if G.verbose else None
                 
                 deltaAssessmentER = random.expovariate(1.0 / G.mean_CT2assessER)
+                G.delta["doctorER"].append(deltaAssessmentER)
                 yield self.env.timeout(deltaAssessmentER)
 
                 exited = self.env.now    
-                TAT = exited - arrived
-                G.leadTimes.append(TAT)
-                print("{} HAD LEAD TIME OF {:.0f} MINUTES.".format(patient.ID, TAT))
+                G.delta["TAT"].append(exited - arrived)
+                print("{} HAD LEAD TIME OF {:.0f} MINUTES.".format(patient.ID,  exited - arrived)) if G.verbose else None
 
     def run_once(self, proc_monitor=False):
-        # G's class-level attributes of type array will need to be reinitialized to clear history
-        G.clear_accumulators()
-
         run_result = {
-            "TAT": None,
-            "Queued4Registration": None,
-            "Queued4Triage": None,
-            "Queued4AssessmentOPD": None,
-            "Queued4AssessmentER": None,
-            "PercUtilizationReceptionist": None,
-            "PercUtilizationNurse": None,
-            "PercUtilizationDoctorOPD": None,
-            "PercUtilizationDoctorER": None
+            "Queued": {},
+            "Delta": {},
+            "Utilization": {}
         }
 
         # Make it so
+        G_resource = G.utilization_event        
         self.env.process(self.entity_generator())
         if proc_monitor:
-            self.env.process(self.monitor_process(['receptionist', 'nurse', 'doctorOPD', 'doctorER']))
+            G_resource = G.utilization_poll
+            self.env.process(self.poll_capacity())
         self.env.run(until=G.simulation_horizon)
 
-        run_result["TAT"] = sum(G.leadTimes) / len(G.leadTimes)
-        run_result["Queued4Registration"] = sum(G.queued4registration) / len(G.queued4registration)
-        run_result["Queued4Triage"] = sum(G.queued4triage) / len(G.queued4triage)
-        run_result["Queued4AssessmentOPD"] = sum(G.queued4assessmentOPD) / len(G.queued4assessmentOPD)
-        run_result["Queued4AssessmentER"] = sum(G.queued4assessmentER) / len(G.queued4assessmentER)
-
+        for resource_type in G.resource_types:
+            run_result["Queued"][resource_type] = median(G.queued[resource_type]) 
+            run_result["Delta"][resource_type] = median(G.delta[resource_type])
+            x, y, _ = list(zip(*G_resource[resource_type]))
+            Nr = trapz(y, x)
+            Dr = G.resource_capacity[resource_type] * x[-1]
+            run_result["Utilization"][resource_type] = Nr / Dr
+        run_result["Delta"]["TAT"] = median(G.delta["TAT"])
+        
         return run_result
    
-    def monitor_process(self, resource_names):
+    def poll_capacity(self):
         """
         Generator for monitoring process that shares the environment with the main process
         and collects information.
         """
-        resources = []
-        for name in resource_names:
-            if hasattr(self, name) and isinstance(getattr(self, name), simpy.resources.resource.Resource):
-                G.resource_utilization[name] = []
-                resources.append((name, getattr(self, name)))
+        for resource_type in self.resources.keys():
+            G.utilization_poll[resource_type] = []
         while True:
-            for rname, r in resources:
+            for k, v in self.resources.items():
                 item = (self.env.now,
-                        r.count,
-                        len(r.queue))
-                G.resource_utilization.get(rname).append(item)
+                        v.count,
+                        len(v.queue))
+                G.utilization_poll.get(k).append(item)
             yield self.env.timeout(0.25)    
 
 

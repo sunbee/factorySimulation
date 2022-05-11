@@ -18,28 +18,29 @@ Refer to Jupyter Notebooks for process models used in simulation here.
 
 st.sidebar.subheader("Inter-Arrival Times")
 G.mean_IAT = st.sidebar.number_input("Inter-Arrival Time", min_value=1, value=8)
+#G.verbose = True
 
 with st.sidebar.container():
     st.sidebar.subheader("Resources")
-    G.number_of_receptionists = st.sidebar.number_input("How many receptionists?", min_value=1, value=1)
-    G.number_of_nurses = st.sidebar.number_input("How many nurses?", min_value=1, value=2)
-    G.number_of_doctorsOPD = st.sidebar.number_input("How many doctors - OPD?", min_value=1, value=1)
-    G.number_of_doctorsER = st.sidebar.number_input("How many doctors - ER?", min_value=1, value=2)
+    G.resource_capacity["receptionist"] = st.sidebar.number_input("How many receptionists?", min_value=1, value=1)
+    G.resource_capacity["nurse"] = st.sidebar.number_input("How many nurses?", min_value=1, value=2)
+    G.resource_capacity["doctorOPD"] = st.sidebar.number_input("How many doctors - OPD?", min_value=1, value=1)
+    G.resource_capacity["doctorER"] = st.sidebar.number_input("How many doctors - ER?", min_value=1, value=2)
 
 st.subheader("Single Run: Summary")
 
 p = Process()
-p.monitor_resource()
+p.monitor_capacity()
 res = p.run_once(proc_monitor=True)
 st.write(res)
 
 st.subheader("Single Run: Resource Monitor")
 
-st.write(G.resource_monitor)
-st.write(G.resource_utilization)
+st.write(G.utilization_event)
+st.write(G.utilization_poll)
 
-x_doctorOPD_, y_doctorOPD_, _ = list(zip(*G.resource_monitor.get("doctorOPD")))
-x_doctorER_,  y_doctorER_, _  = list(zip(*G.resource_monitor.get("doctorER")))
+x_doctorOPD_, y_doctorOPD_, _ = list(zip(*G.utilization_event.get("doctorOPD")))
+x_doctorER_,  y_doctorER_, _  = list(zip(*G.utilization_event.get("doctorER")))
 
 UDoctorOPD_ = ggplot(aes(x=x_doctorOPD_, y=y_doctorOPD_)) \
                 + geom_step() \
@@ -58,8 +59,8 @@ with container_B:
     with col_BR:
         st.pyplot(ggplot.draw(UDoctorER_))
 
-x_doctorOPD, y_doctorOPD, _ = list(zip(*G.resource_utilization.get("doctorOPD")))
-x_doctorER,  y_doctorER, _  = list(zip(*G.resource_utilization.get("doctorER")))
+x_doctorOPD, y_doctorOPD, _ = list(zip(*G.utilization_poll.get("doctorOPD")))
+x_doctorER,  y_doctorER, _  = list(zip(*G.utilization_poll.get("doctorER")))
 
 UDoctorOPD = ggplot(aes(x=x_doctorOPD, y=y_doctorOPD)) \
                 + geom_step() \
@@ -83,24 +84,25 @@ sim_runs = st.sidebar.slider("How many runs?", 30, 100)
 st.subheader("Multiple Runs: Queuing Times")
 
 sim_results = []
-resource_monitor = []
 for i in range(0, sim_runs):
     p = Process()
+    p.monitor_capacity()
     sim_results.append(p.run_once())
-    resource_monitor.append(G.resource_monitor)
-    print(G.resource_monitor)
-df = pd.DataFrame(sim_results)
 
-st.write(len(G.queued4triage))
+Queued = {}
+for resource_type in G.resource_types:
+    Queued[resource_type] = [sim_result["Queued"][resource_type] for sim_result in sim_results]
+Queued["TAT"] = [sim_result["Delta"]["TAT"] for sim_result in sim_results]
+df = pd.DataFrame(Queued)
 
-hQ4R = ggplot(df, aes(x="Queued4Registration")) \
+hQ4R = ggplot(df, aes(x="receptionist")) \
                 + geom_histogram(fill="pink", color="deeppink") \
-                + ggtitle(f"{G.number_of_receptionists} Receptionists @ REGISTRATION") \
+                + ggtitle("{} Receptionists @ REGISTRATION".format(G.resource_capacity["receptionist"])) \
                 + xlab("Time in queue @ Reception")
 
-hQ4T = ggplot(df, aes(x="Queued4Triage")) \
+hQ4T = ggplot(df, aes(x="nurse")) \
                 + geom_histogram(fill="pink", color="deeppink") \
-                + ggtitle(f"{G.number_of_nurses} Nurses @ TRIAGE") \
+                + ggtitle("{} Nurses @ TRIAGE".format(G.resource_capacity["nurse"])) \
                 + xlab("Time in queue @ Triage")
 
 container_one = st.container()
@@ -112,16 +114,16 @@ with container_one:
     with col_right:
         st.pyplot(ggplot.draw(hQ4T))
 
-hQ4O = ggplot(df, aes(x="Queued4AssessmentOPD")) \
+hQ4O = ggplot(df, aes(x="doctorOPD")) \
                 + geom_histogram(fill="pink", color="deeppink") \
-                + ggtitle(f"{G.number_of_doctorsOPD} Doctors @ OPD") \
+                + ggtitle("{} Doctors @ OPD".format(G.resource_capacity["doctorOPD"])) \
                 + xlab("Time in queue @ OPD") \
-                + geom_vline(xintercept=sum(df.Queued4AssessmentOPD)/len(df.Queued4AssessmentOPD))
-hQ4E = ggplot(df, aes(x="Queued4AssessmentER")) \
+                + geom_vline(xintercept=sum(df.doctorOPD)/len(df.doctorOPD))
+hQ4E = ggplot(df, aes(x="doctorER")) \
                 + geom_histogram(fill="pink", color="deeppink") \
-                + ggtitle(f"{G.number_of_doctorsER} Doctors @ ER") \
+                + ggtitle("{} Doctors @ ER".format(G.resource_capacity["doctorER"])) \
                 + xlab("Time in queue @ ER") \
-                + geom_vline(xintercept=sum(df.Queued4AssessmentER)/len(df.Queued4AssessmentER))
+                + geom_vline(xintercept=sum(df.doctorER)/len(df.doctorER))
 
 container_two = st.container()
 col_left, col_right = st.columns(2)
@@ -137,12 +139,14 @@ hTAT = ggplot(df, aes(x="TAT")) \
                 + ggtitle(f"LEAD TIME (END-END), IAT {G.mean_IAT}") \
                 + xlab("End-End TAT") \
                 + geom_vline(xintercept=sum(df.TAT)/len(df.TAT))
+
 hTex = """
 ### Identifying Bottlenecks
 The plots show queueing times.
 Steps that have long queues forming
 before them are likely choke-points.
 """
+
 container_three = st.container()
 col_left, col_right = st.columns(2)
 
@@ -155,3 +159,5 @@ with container_three:
 st.subheader("Raw Data")
 
 st.dataframe(df)
+
+
