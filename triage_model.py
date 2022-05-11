@@ -42,6 +42,16 @@ def get_monitor(data):
     return monitor
 
 def help_monitor(resource_name, ts):
+    """
+    Monkey-patching wraps a monitoring process around a resource's get/put or request/release methods.
+    This does not account for the situation where a request is held in abeyance while the resource is busy.
+    The resource is snapped up as soon as it is released in this scenario, and monkey patching only registers
+    the request and release events, not the re-assignment coincident with release.
+    Hence this patch, which uses the timestamp of a resource's latest event to check for this scenario and remediate.
+    Usage:
+    1. Align with `monitor(resource)` which queries a resource for a tuple.
+    2. Invoke after the yield statement following a request for resource.
+    """
     if (resource_name in G.resource_monitor) \
         and (G.resource_monitor.get(resource_name)[-1][0] == ts) \
         and (G.resource_monitor.get(resource_name)[-1][-1] > 0):
@@ -74,7 +84,7 @@ class G:
     mean_CT2assessOPD = 60
     mean_CT2assessER = 30
 
-    # Information gathering
+    # Information gathering, single run
     arrived4process = []
     queued4registration = []    
     delta4registration = []
@@ -86,11 +96,14 @@ class G:
     delta4assessmentER = []
     leadTimes = []
 
-    # Monitoring
+    # Monitoring, single run
     resource_monitor = {}       # Data from monkey-patched resource 
     resource_utilization = {}   # Data from generator for monitoring process
 
     def clear_accumulators():
+        """
+        Empty all lists with data from a single run between successive runs
+        """
         G.arrived4process.clear()
         G.queued4registration.clear()    
         G.delta4registration.clear()
