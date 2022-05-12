@@ -1,6 +1,8 @@
+import resource
+from statistics import median
 import matplotlib.pyplot as plt
 import streamlit as st
-from triage_model import G, Patient, Process, patch_resource, get_monitor
+from triage_model import G, Patient, Process, gggauge, patch_resource, get_monitor
 import pandas as pd
 from plotnine import *
 
@@ -81,13 +83,28 @@ with container_A:
 
 sim_runs = st.sidebar.slider("How many runs?", 30, 100)
 
-st.subheader("Multiple Runs: Queuing Times")
+st.subheader("Multiple Runs: Performance Indicators")
 
 sim_results = []
 for i in range(0, sim_runs):
     p = Process()
     p.monitor_capacity()
     sim_results.append(p.run_once())
+
+Capacity_Utilization = {}
+ggg_plots = []
+for resource_type in G.resource_types:
+        Capacity_Utilization[resource_type] = median([sim_result["Utilization"][resource_type] for sim_result in sim_results])
+        ggg_plots.append(gggauge(Capacity_Utilization.get(resource_type)*100))
+print(Capacity_Utilization)
+
+with st.container():
+    ggg_panels = st.columns(4)
+    for i in range(4):
+        with ggg_panels[i]:
+            st.pyplot(ggplot.draw(ggg_plots[i]))
+
+st.markdown("""___""")
 
 Queued = {}
 for resource_type in G.resource_types:

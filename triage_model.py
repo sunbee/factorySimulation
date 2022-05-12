@@ -1,7 +1,9 @@
 import simpy
 import random
-from numpy import median, trapz
+from numpy import median, trapz, linspace, sin, cos, pi, vectorize, append, array, asarray
 from functools import partial, wraps
+from plotnine import *
+import pandas as pd
 
 def patch_resource(resource, pre=None, post=None):
     """
@@ -238,5 +240,35 @@ class Process:
                 G.utilization_poll.get(k).append(item)
             yield self.env.timeout(0.25)    
 
+def gggauge(pos, breaks=asarray([0, 30, 70, 100]), r_inner=0.5, r_outer=1.0):
+    def get_poly(a, b, r_inner=r_inner, r_outer=r_outer):
+        
+        theta_start = pi * (1 - a/100)
+        theta_end   = pi * (1 - b/100)
+        theta       = linspace(theta_start, theta_end, 100)
+        x           = append(r_inner * cos(theta), r_outer * cos(theta)[::-1]) 
+        y           = append(r_inner * sin(theta), r_outer * sin(theta)[::-1]) 
+        return pd.DataFrame({'x': x,'y': y})
 
+    df_r = get_poly(breaks[0],breaks[1])
+    df_g = get_poly(breaks[1],breaks[2])
+    df_f = get_poly(breaks[2],breaks[3])
+    df_m = get_poly(pos-1,pos+1,0.2)
 
+    return ggplot() \
+        + geom_polygon(data=df_r, mapping=aes(df_r["x"], df_r["y"]), fill="red" ) \
+        + geom_polygon(data=df_g, mapping=aes(df_g["x"], df_g["y"]), fill="gold") \
+        + geom_polygon(data=df_f, mapping=aes(df_f["x"], df_f["y"]), fill="forestgreen") \
+        + geom_polygon(data=df_m, mapping=aes(df_m["x"], df_m["y"])) \
+        + geom_text(data=pd.DataFrame(breaks), size=8, fontstyle="normal",
+                mapping=aes(x=1.1*r_outer*cos(pi*(1-breaks/100)),y=1.1*r_outer*sin(pi*(1-breaks/100)),label="%".join(map(str, breaks)))) \
+        + annotate("text", x=0, y=0, label="{:.2f}".format(pos), size=12, fontstyle="normal") \
+        + coord_fixed() \
+        + theme_bw() \
+        + theme(axis_text=element_blank(),
+                axis_title=element_blank(),
+                axis_ticks=element_blank(),
+                panel_grid=element_blank(),
+                panel_border=element_blank()) 
+
+# Usage: ggg = gggauge(52,breaks=asarray([0, 35, 70, 100]))
