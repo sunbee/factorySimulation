@@ -98,6 +98,7 @@ class Patient:
     """
     def __init__(self, patient_ID) -> None:
         self.ID = patient_ID
+        self.priority = 2
 
 class Consultation:
     def __init__(self) -> None:
@@ -138,28 +139,38 @@ class Consultation:
         G.arrived.append(arrived_at)
         print("Patient {} entered the queue at {:.2f}".format(patient.ID, arrived_at))
 
-        with self.dietician.request() as req:
-            # Wait until the dietician is available
-            yield req
+        delta = random.expovariate(1.0 / G.mean_CT)
+        while delta > 0:
+            with self.dietician.request(priority=patient.priority) as req:
+                # Wait until the dietician is available
+                yield req
 
-            started_at = self.env.now
-            help_monitor('dietician', started_at)
-            queued_for = started_at - arrived_at
-            G.queued.append(queued_for)
-            print("Patient {} entered consultation at {:.2f}, having waited {:.2f}".format(patient.ID, started_at, queued_for))
+                started_at = self.env.now
+                help_monitor('dietician', started_at)
+                queued_for = started_at - arrived_at
+                G.queued.append(queued_for)
+                print("Patient {} entered consultation at {:.2f}, having waited {:.2f}".format(patient.ID, started_at, queued_for))
 
-            delta = random.expovariate(1.0 / G.mean_CT)
-            yield self.env.timeout(delta)
+                #delta = random.expovariate(1.0 / G.mean_CT)
+                try:
+                    yield self.env.timeout(delta)
+                    delta = 0
+                except simpy.Interrupt as interrupt:
+                    by = interrupt.cause.by
+                    usage = self.env.now - interrupt.cause.usage_since
+                    delta -= usage
+                    patient.priority -= 0.1  # Bump up priority to resume with interrupted patient
+                    print("{} got pre-empted by {} after {}".format(patient.ID, by, usage))
 
-            exited_at = self.env.now
-            TAT = exited_at - arrived_at
-            G.lead.append(TAT)
-            print("Patient {} exited at {:.2f}, having spent {:.2f} in clinic.".format(patient.ID, exited_at, TAT))
-            
+        exited_at = self.env.now
+        TAT = exited_at - arrived_at
+        G.lead.append(TAT)
+        print("Patient {} exited at {:.2f}, having spent {:.2f} in clinic.".format(patient.ID, exited_at, TAT))
+                
     def run_once(self, proc_monitor=False):
-        G.clear_accumulators() # Clear history
-
-        run_averages = {
+        G.clear_accumulators()  # Clear history
+        self.monitor_resource() # Monkey-patch the dietician
+        run_averages = {        # Template to gather CTQs from single run
             "queued": None,
             "lead": None,
             "utilization": None
@@ -203,12 +214,14 @@ class Break4Lunch:
     Usage: Create an instance after setting up the clinic for simulation,
     then run in the same environment as the clinic.
     """
-    def __init__(self, env, worker, break_hour) -> None:
+    def __init__(self, env, worker, break_at, shift_duration=480) -> None:
         self.env = env
-        self.worker = worker            # Must be a resource of pre-emptive  type
-        self.break_hour = break_hour    # Start of break of fixed duration 
-                                        # in no. of simulation steps from start of shift
-        self.length_of_shift = 480      # 8 hours x 60 min
+        self.worker = worker                    # Must be a resource of pre-emptive  type
+        self.break_at = break_at                # Start of break of fixed duration 
+                                                # in no. of simulation steps from start of shift
+        self.length_of_shift = shift_duration   # 8 hours x 60 min
+
+        self.env.process(self.generate_lunch())
 
     def generate_lunch(self):
         """
@@ -220,20 +233,17 @@ class Break4Lunch:
         - Break time is 60 minutes
         """
         herenow = self.env.now
-        until_lunch = self.break_hour - herenow  # How long till we break for lunch?
+        until_lunch = self.break_at - herenow  # How long till we break for lunch?
         while True:
             if until_lunch > 0:
-                yield self.env.timeout()        # Keep going until lunch break
-            print("Gone to lunch at {:.2f}, break hour is {:.2f}.".format(self.here.now, self.break_hour))
-            with self.worker.request(priority=-99) as req:  # Break for lunch
-                yield 60                        # Gobble-gobble
-            print("Back from lunch at {:.2f} and open for business.".format(self.env.now))
-            self.break_hour += self.length_of_shift 
-            until_lunch = self.break_hour - self.env.now
-
-    def do_lunch(self):
-        self.env.process(self.generate_lunch())
-        self.env.run(until=G.simulation_horizon)
+                yield self.env.timeout(until_lunch)         # Keep going until lunch break
+            with self.worker.request(priority=1) as req:  # Break for lunch
+                yield req
+                print("Gone to lunch at {:.2f}, break hour is {:.2f}.".format(self.env.now, self.break_at))
+                yield self.env.timeout(6)                   # Gobble-gobble
+                print("Back from lunch at {:.2f} and open for business.".format(self.env.now))
+            self.break_at += self.length_of_shift 
+            until_lunch = self.break_at - self.env.now
 
 
 
