@@ -102,7 +102,7 @@ class Patient:
 class Consultation:
     def __init__(self) -> None:
         self.env = simpy.Environment()
-        self.dietician = simpy.Resource(self.env, 1)
+        self.dietician = simpy.PreemptiveResource(self.env, 1)
         self.patient_counter = 0
 
     def monitor_resource(self):
@@ -197,3 +197,43 @@ class Consultation:
                         len(r.queue))
                 G.resource_utilization.get(rname).append(item)
             yield self.env.timeout(0.25)    
+
+class Break4Lunch:
+    """
+    Usage: Create an instance after setting up the clinic for simulation,
+    then run in the same environment as the clinic.
+    """
+    def __init__(self, env, worker, break_hour) -> None:
+        self.env = env
+        self.worker = worker            # Must be a resource of pre-emptive  type
+        self.break_hour = break_hour    # Start of break of fixed duration 
+                                        # in no. of simulation steps from start of shift
+        self.length_of_shift = 480      # 8 hours x 60 min
+
+    def generate_lunch(self):
+        """
+        Assume:
+        - Simulation step size is 1 minute
+        - 480 minutes in one shift
+        - One shift ends and another starts
+        - Break time will repeat once every shift 
+        - Break time is 60 minutes
+        """
+        herenow = self.env.now
+        until_lunch = self.break_hour - herenow  # How long till we break for lunch?
+        while True:
+            if until_lunch > 0:
+                yield self.env.timeout()        # Keep going until lunch break
+            print("Gone to lunch at {:.2f}, break hour is {:.2f}.".format(self.here.now, self.break_hour))
+            with self.worker.request(priority=-99) as req:  # Break for lunch
+                yield 60                        # Gobble-gobble
+            print("Back from lunch at {:.2f} and open for business.".format(self.env.now))
+            self.break_hour += self.length_of_shift 
+            until_lunch = self.break_hour - self.env.now
+
+    def do_lunch(self):
+        self.env.process(self.generate_lunch())
+        self.env.run(until=G.simulation_horizon)
+
+
+
