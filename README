@@ -3,7 +3,8 @@ Model a process in Simpy and observe in simulation.
 - **rev001**: Model the process in Simpy in OOP style and wrap the code in a Web UI in Streamlit.
 - **rev002**: Set up a process monitor to keep track of resource utilization.
 - **rev003**: Run on multiple cores with joblib and add gauges for metrics e.g. percent utilization.
-- **revXXX**: Update process model to include unplanned downtime.
+- **rev004**: Update process model with planned downtime. Medical professionals do lunch :)
+- **rev005**: Update process model to include unplanned downtime. 
 
 Possible enhancements for consideration as follows:
 - Batch-processing: A step processes entities in batches. *Strategy*: Define a global array to hold entities as they are processed in the previous step. Once the array length is batch size, execute the next step and clear the array. 
