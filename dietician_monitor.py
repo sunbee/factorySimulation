@@ -1,7 +1,7 @@
 import resource
 import simpy
 import random
-from numpy import median, trapz
+from numpy import median, trapz, asarray
 from functools import partial, wraps
 
 def patch_resource(resource, pre=None, post=None):
@@ -58,6 +58,7 @@ def help_monitor(resource_name, ts):
     i.e. right after 'yield req'. Compares the timestamp of capacity allocation 
     with the timestamp of the most recent element on the list and if same, 
     pops the item and puts it back after modification. 
+    Usage: Call after 'yield' statement following request for resource
     """
     if (resource_name in G.resource_monitor) \
         and (G.resource_monitor.get(resource_name)[-1][0] == ts) \
@@ -84,10 +85,10 @@ class G:
     lead = []
 
     # Monitoring
-    resource_utilization = {}  # Data from genertor for process monitoring 
-    resource_monitor = {}      # Data from monkey-patching some of a resource's methods 
+    resource_utilization = {}   # Data from generator for process monitoring (polled)
+    resource_monitor = {}       # Data from monkey-patching some of a resource's methods (event-driven)
 
-    def clear_accumulators():
+    def clear_accumulators():   # Call in method 'run_once()' of class 'Consultation'
         G.arrived.clear()
         G.queued.clear()
         G.lead.clear()
@@ -98,12 +99,12 @@ class Patient:
     """
     def __init__(self, patient_ID) -> None:
         self.ID = patient_ID
-        self.priority = 2
+        self.priority = 3
 
 class Consultation:
     def __init__(self) -> None:
         self.env = simpy.Environment()
-        self.dietician = simpy.PreemptiveResource(self.env, 1)
+        self.dietician = simpy.PriorityResource(self.env, G.number_of_dieticians)
         self.patient_counter = 0
 
     def monitor_resource(self):
@@ -111,6 +112,7 @@ class Consultation:
         USE THE MONKEY-PATCHED RESOURCE FOR MONITORING RESOURCE UTILIZATION
         Gets the callback with 'get_monitor()' 
         and executes monkey-patching resource with 'patch_resource()`
+        Usage: Call in method 'run_once()' of this class
         """
         resource_names=['dietician']
         for name in resource_names:
@@ -159,7 +161,7 @@ class Consultation:
                     by = interrupt.cause.by
                     usage = self.env.now - interrupt.cause.usage_since
                     delta -= usage
-                    patient.priority -= 0.1  # Bump up priority to resume with interrupted patient
+                    patient.priority -= 0.1  # Bump up priority to treat interrupted patient upon resumption
                     print("{} got pre-empted by {} after {}".format(patient.ID, by, usage))
 
         exited_at = self.env.now
@@ -195,6 +197,7 @@ class Consultation:
         """
         Generator for monitoring process that shares the environment with the main process
         and collects information.
+        Usage: Call in method `run_once()` of this class, checking if method's arg. 'proc_monitor' is True
         """
         resources = []
         for name in resource_names:
@@ -211,39 +214,56 @@ class Consultation:
 
 class Break4Lunch:
     """
-    Usage: Create an instance after setting up the clinic for simulation,
-    then run in the same environment as the clinic.
+    Usage: Create an instance after setting up the clinic for simulation.
     """
-    def __init__(self, env, worker, break_at, shift_duration=480) -> None:
+    def __init__(self, env, worker, break_at, break_interval=20) -> None:
         self.env = env
         self.worker = worker                    # Must be a resource of pre-emptive  type
         self.break_at = break_at                # Start of break of fixed duration 
                                                 # in no. of simulation steps from start of shift
-        self.length_of_shift = shift_duration   # 8 hours x 60 min
-
-        self.env.process(self.generate_lunch())
+        self.break_interval = break_interval    # Duration of break
+        
+        [self.env.process(self.generate_lunch()) for i in range(G.number_of_dieticians)]
 
     def generate_lunch(self):
         """
-        Assume:
-        - Simulation step size is 1 minute
-        - 480 minutes in one shift
-        - One shift ends and another starts
-        - Break time will repeat once every shift 
-        - Break time is 60 minutes
+        Usage: Call in the constructor of this class for as many times as the resource capacity
+        Only one break at a time can be scheduled this way. That means, one simpy process
+        per simpy resource per break. May seem wasteful, but follows from the fact that 
+        a simpy resource is an undifferentiated bulk.
         """
         herenow = self.env.now
         until_lunch = self.break_at - herenow  # How long till we break for lunch?
-        while True:
-            if until_lunch > 0:
-                yield self.env.timeout(until_lunch)         # Keep going until lunch break
-            with self.worker.request(priority=1) as req:  # Break for lunch
-                yield req
-                print("Gone to lunch at {:.2f}, break hour is {:.2f}.".format(self.env.now, self.break_at))
-                yield self.env.timeout(6)                   # Gobble-gobble
-                print("Back from lunch at {:.2f} and open for business.".format(self.env.now))
-            self.break_at += self.length_of_shift 
-            until_lunch = self.break_at - self.env.now
+        if until_lunch > 0:
+            yield self.env.timeout(until_lunch)             # Keep going until lunch break
+        with self.worker.request(priority=1) as req:        # Break for lunch
+            yield req
+            print("Gone to lunch at {:.2f}, break hour is {:.2f}.".format(self.env.now, self.break_at))
+            yield self.env.timeout(self.break_interval)     # Gobble-gobble
+            print("Back from lunch at {:.2f} and open for business.".format(self.env.now))
 
 
+class Break2Schedule:
+    def __init__(self, env, worker, scheduled_breaks) -> None:
+        self.env = env
+        self.worker = worker
+        self.scheduled_breaks = scheduled_breaks
 
+        self.generate_breaks()
+    
+    def break_generator(self, break_start, break_interval):
+        print(f"{break_start} : {break_interval}")
+        until_break = break_start - self.env.now
+        if until_break > 0:
+            yield self.env.timeout(until_break)
+        with self.worker.request(priority=1) as req:
+            yield req
+            print("Gone on break at {:.2f} for scheduled break at {:.2f}".format(self.env.now, break_start))
+            yield self.env.timeout(break_interval)
+            print("Break ended, back in business at {:.2f}.".format(self.env.now))
+
+    def generate_breaks(self):
+        for this_break in self.scheduled_breaks:  # Handle one break in one iteration of for loop
+            break_start, break_interval = this_break
+            # Give each dietician this break! 
+            [self.env.process(self.break_generator(break_start, break_interval)) for i in range(G.number_of_dieticians)]
