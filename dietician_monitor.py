@@ -102,11 +102,14 @@ class Patient:
         self.priority = 3
 
 class Consultation:
-    def __init__(self) -> None:
+    def __init__(self, shift_length=None) -> None:
         self.env = simpy.Environment()
         self.dietician = simpy.PriorityResource(self.env, G.number_of_dieticians)
         self.patient_counter = 0
-
+        self.shift_length = shift_length
+        self.break4shift = False
+        self.resume_shift = self.env.event()
+        
     def monitor_resource(self):
         """
         USE THE MONKEY-PATCHED RESOURCE FOR MONITORING RESOURCE UTILIZATION
@@ -135,6 +138,14 @@ class Consultation:
             # Await new arrival
             deltaIAT = random.expovariate(1.0 / G.mean_IAT)
             yield self.env.timeout(deltaIAT)
+
+            if self.shift_length and self.break4shift:
+                print("Shift over, tools down at {:.2f}".format(self.env.now))
+                yield self.env.timeout(self.shift_length)
+                print("Resuming new shift at {:.2f}".format(self.env.now))
+                self.break4shift = False
+                self.resume_shift.succeed()
+                self.resume_shift = self.env.event()
 
     def generate_consultation(self, patient):
         arrived_at = self.env.now
@@ -181,6 +192,8 @@ class Consultation:
         self.env.process(self.generate_patient())
         if proc_monitor:
             self.env.process(self.monitor_process(['dietician']))
+        if self.shift_length:
+            self.shift_process = self.env.process(self.go_home_now())          
         self.env.run(until=G.simulation_horizon)
 
         run_averages["queued"] = sum(G.queued) / len(G.queued) if len(G.queued) > 0 else None
@@ -212,9 +225,20 @@ class Consultation:
                 G.resource_utilization.get(rname).append(item)
             yield self.env.timeout(0.25)    
 
+    def go_home_now(self):
+        while True:
+            yield self.env.timeout(self.shift_length)
+            print("Stopping shift at {:.2f}".format(self.env.now))
+            self.break4shift = True
+            yield self.resume_shift
+            print("Resumed shift at {:.2f}".format(self.env.now))
+
 class Break4Lunch:
     """
     Usage: Create an instance after setting up the clinic for simulation.
+    Note:
+    The constructor does the work. Rubber hits the road in method 'run_once()' of class Consultation
+    where the simulation is run.
     """
     def __init__(self, env, worker, break_at, break_interval=20) -> None:
         self.env = env
@@ -227,7 +251,8 @@ class Break4Lunch:
 
     def generate_lunch(self):
         """
-        Usage: Call in the constructor of this class for as many times as the resource capacity
+        Usage: Call in the constructor of this class for as many times as the resource capacity.
+        Note:
         Only one break at a time can be scheduled this way. That means, one simpy process
         per simpy resource per break. May seem wasteful, but follows from the fact that 
         a simpy resource is an undifferentiated bulk.
@@ -242,8 +267,13 @@ class Break4Lunch:
             yield self.env.timeout(self.break_interval)     # Gobble-gobble
             print("Back from lunch at {:.2f} and open for business.".format(self.env.now))
 
-
 class Break2Schedule:
+    """
+    Usage: Create an instance after setting up the clinic for simulation.
+    Note:
+    Constructor does the work. Rubber hits the road in method 'run_once()' of class Consultation
+    where the simulation is run.
+    """
     def __init__(self, env, worker, scheduled_breaks) -> None:
         self.env = env
         self.worker = worker
@@ -267,3 +297,5 @@ class Break2Schedule:
             break_start, break_interval = this_break
             # Give each dietician this break! 
             [self.env.process(self.break_generator(break_start, break_interval)) for i in range(G.number_of_dieticians)]
+
+
