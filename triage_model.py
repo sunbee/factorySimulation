@@ -263,8 +263,7 @@ class Process:
    
     def poll_capacity(self):
         """
-        Generator for monitoring by polling every kind of resource
-        for state information relevant to capacity utilization.
+        Monitor resource state by polling with a generator.
         Initializes the attribute 'utilization_poll' of class G for logging.
         Usage: Use in method 'run_once()' of class Process if 'proc_monitor=True'.
         """
