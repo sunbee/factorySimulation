@@ -9,7 +9,7 @@ def patch_resource(resource, pre=None, post=None):
     """
     Decorates the get/request and put/release methods of Simpy resource
     with features for monitoring, logging resource state with timestamp
-    when these methods are called.
+    when these methods are called (i.e. resource changes state).
     Implementation implements and extends the decorator pattern as follows:
     1. Define a wrapper that wraps the call to resource get/put or request/release method in pre and/or post callables. 
     2. Return the wrapper function. Note that pre and post take resource as the only argument.
@@ -52,15 +52,17 @@ def get_monitor(data):
 def help_monitor(resource_name, ts):
     """
     Fix the gap with monkey-patching which does not resolve between 
-    capacity requested and capacity allocated when an entity is enqueued.
+    capacity requested and capacity allocated when an entity is enqueued
+    upon requesting capacity.
     Modifies the list where the monkey-patched logs data upon state change.
     The definition of state pertains to resource attributes:
-    1. Capacity in use
-    2. Requests in queue
+    1. Count of capacity in use
+    2. Number of requests in queue
     Once capacity is allocated, compares the timestamp of lastest log entry
-    with time now. If a difference is noted, then pops the latest entry,
-    updates the record to reflect capacity allocated, and re-enters it in the log.
-    Usage: Call this function right after capacity allocated i.e. after 'yield req'. 
+    with time now. If a difference is noted, then pops the record from list,
+    updates it to reflect capacity allocation, and re-enters it in the log.
+    Usage: Call this function right after capacity is allocated 
+    i.e. after 'yield req'. 
     """
     if (resource_name in G.utilization_event) \
         and (G.utilization_event.get(resource_name)[-1][0] == ts) \
@@ -75,7 +77,7 @@ class G:
     - Model parameters e.g. Inter-Arrival Time, etc.
     - Resource allocation
     - Simulation settings e.g. Number of steps in a simulation run, number of simulation runs, etc.
-    Use the class attributes without instantiating an object! 
+    Usage: Use the class attributes without instantiating an object! 
     """
     # Simulation settings
     number_runs = 30
@@ -103,8 +105,8 @@ class G:
     delta = {}              # Processing times in a single run, step-wise (Use type of resource as key to extract data for that step)
 
     # Resource Monitoring
-    utilization_event = {}  # Data from monkey-patched resource, single run
-    utilization_poll = {}   # Data from generator for polling resource stats, single run
+    utilization_event = {}  # Data logged by monkey-patched resource in a single run
+    utilization_poll = {}   # Data logged by generator polling resource state in a single run
 
 class Patient:
     """
@@ -126,7 +128,7 @@ class Process:
 
     def monitor_capacity(self):
         """
-        USE THE MONKEY-PATCHED RESOURCE FOR MONITORING RESOURCE UTILIZATION
+        USE THE MONKEY-PATCHED RESOURCE FOR MONITORING RESOURCE UTILIZATION.
         Gets the callback with 'get_monitor()' 
         and executes monkey-patching resource with 'patch_resource()`.
         Initializes the attribute 'utilization_event' of class G for logging.
@@ -229,20 +231,21 @@ class Process:
         """
         Execute one simulation run and log quantitative results.
         Enhancements:
-        1. Monitor capacity utilization - event-driven monitoring is ON for all resource types
-        2. Monitor capacity utilization - polling is ON when 'proc_monitor=True'
+        1. Monitor capacity utilization - event-driven monitoring is ON for all resource types via method 'monitor_capacity()'
+        2. Monitor capacity utilization - polling is ON when 'proc_monitor=True' via generator method 'poll_capacity()'
+        Logs are stashed in slots of class G as if globals.
         """
         self.monitor_capacity()     # Monkey-patch each resource type to log capacity utilization 
         run_result = {              # Initialize container to hold summary of simulation run
-            "Queued": {},
-            "Delta": {},
-            "Utilization": {}
+            "Queued": {},           # Time in queue
+            "Delta": {},            # Time in processing
+            "Utilization": {}       # Capacity utilization
         }
 
         # Make it so
         G_resource = G.utilization_event        
         self.env.process(self.entity_generator())
-        if proc_monitor:    # If polling is enabled for resource monitoring..
+        if proc_monitor:    # Enable polling resource state
             G_resource = G.utilization_poll
             self.env.process(self.poll_capacity())
         self.env.run(until=G.simulation_horizon)
