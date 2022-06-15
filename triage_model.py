@@ -8,7 +8,7 @@ import pandas as pd
 def patch_resource(resource, pre=None, post=None):
     """
     Decorates the get/request and put/release methods of Simpy resource
-    with features for monitoring, logging resource attributes with timestamp
+    with features for monitoring, logging resource state with timestamp
     when these methods are called.
     Implementation implements and extends the decorator pattern as follows:
     1. Define a wrapper that wraps the call to resource get/put or request/release method in pre and/or post callables. 
@@ -35,6 +35,12 @@ def patch_resource(resource, pre=None, post=None):
             setattr(resource, name, get_wrapper(getattr(resource, name)))    
 
 def get_monitor(data):
+    """
+    Query the attributes of the target resource with this callback.
+    Usage: Passed to 'patch_resource()' as argument 'pre=' or 'post=', 
+    depending on whether to execute the callback before or after 
+    the resource's get/put or request/release method calls.
+    """
     def monitor(resource):
         data.append((
             resource._env.now,      # simulation timestamp
@@ -44,6 +50,18 @@ def get_monitor(data):
     return monitor
 
 def help_monitor(resource_name, ts):
+    """
+    Fix the gap with monkey-patching which does not resolve between 
+    capacity requested and capacity allocated when an entity is enqueued.
+    Modifies the list where the monkey-patched logs data upon state change.
+    The definition of state pertains to resource attributes:
+    1. Capacity in use
+    2. Requests in queue
+    Once capacity is allocated, compares the timestamp of lastest log entry
+    with time now. If a difference is noted, then pops the latest entry,
+    updates the record to reflect capacity allocated, and re-enters it in the log.
+    Usage: Call this function right after capacity allocated i.e. after 'yield req'. 
+    """
     if (resource_name in G.utilization_event) \
         and (G.utilization_event.get(resource_name)[-1][0] == ts) \
         and (G.utilization_event.get(resource_name)[-1][-1] > 0):
@@ -107,6 +125,14 @@ class Process:
             self.resources[resource_type] = simpy.Resource(self.env, G.resource_capacity.get(resource_type))
 
     def monitor_capacity(self):
+        """
+        USE THE MONKEY-PATCHED RESOURCE FOR MONITORING RESOURCE UTILIZATION
+        Gets the callback with 'get_monitor()' 
+        and executes monkey-patching resource with 'patch_resource()`.
+        Initializes the attribute 'utilization_event' of class G for logging.
+        Usage: Call in method 'run_once()' of this class to monkey-patch
+        every kind of resource and enable monitoring of capacity utilization.
+        """
         for resource_type in self.resources.keys():
             G.utilization_event[resource_type] = []
             mon_callback = get_monitor(G.utilization_event[resource_type])
@@ -200,7 +226,14 @@ class Process:
                 print("{} HAD LEAD TIME OF {:.0f} MINUTES.".format(patient.ID,  exited - arrived)) if G.verbose else None
 
     def run_once(self, proc_monitor=False):
-        run_result = {
+        """
+        Execute one simulation run and log quantitative results.
+        Enhancements:
+        1. Monitor capacity utilization - event-driven monitoring is ON for all resource types
+        2. Monitor capacity utilization - polling is ON when 'proc_monitor=True'
+        """
+        self.monitor_capacity()     # Monkey-patch each resource type to log capacity utilization 
+        run_result = {              # Initialize container to hold summary of simulation run
             "Queued": {},
             "Delta": {},
             "Utilization": {}
@@ -209,7 +242,7 @@ class Process:
         # Make it so
         G_resource = G.utilization_event        
         self.env.process(self.entity_generator())
-        if proc_monitor:
+        if proc_monitor:    # If polling is enabled for resource monitoring..
             G_resource = G.utilization_poll
             self.env.process(self.poll_capacity())
         self.env.run(until=G.simulation_horizon)
@@ -227,8 +260,10 @@ class Process:
    
     def poll_capacity(self):
         """
-        Generator for monitoring process that shares the environment with the main process
-        and collects information.
+        Generator for monitoring by polling every kind of resource
+        for state information relevant to capacity utilization.
+        Initializes the attribute 'utilization_poll' of class G for logging.
+        Usage: Use in method 'run_once()' of class Process if 'proc_monitor=True'.
         """
         for resource_type in self.resources.keys():
             G.utilization_poll[resource_type] = []
@@ -256,12 +291,12 @@ def gggauge(pos, breaks=asarray([0, 30, 70, 100]), r_inner=0.5, r_outer=1.0):
     df_m = get_poly(pos-1,pos+1,0.2)
 
     return ggplot() \
-        + geom_polygon(data=df_r, mapping=aes(df_r["x"], df_r["y"]), fill="red" ) \
+        + geom_polygon(data=df_r, mapping=aes(df_r["x"], df_r["y"]), fill="forestgreen" ) \
         + geom_polygon(data=df_g, mapping=aes(df_g["x"], df_g["y"]), fill="gold") \
-        + geom_polygon(data=df_f, mapping=aes(df_f["x"], df_f["y"]), fill="forestgreen") \
+        + geom_polygon(data=df_f, mapping=aes(df_f["x"], df_f["y"]), fill="red") \
         + geom_polygon(data=df_m, mapping=aes(df_m["x"], df_m["y"])) \
         + geom_text(data=pd.DataFrame(breaks), size=8, fontstyle="normal",
-                mapping=aes(x=1.1*r_outer*cos(pi*(1-breaks/100)),y=1.1*r_outer*sin(pi*(1-breaks/100)),label="%".join(map(str, breaks)))) \
+                mapping=aes(x=1.1*r_outer*cos(pi*(1-breaks/100)),y=1.1*r_outer*sin(pi*(1-breaks/100)), label="%".join(map(str, breaks)))) \
         + annotate("text", x=0, y=0, label="{:.2f}".format(pos), size=12, fontstyle="normal") \
         + coord_fixed() \
         + theme_bw() \

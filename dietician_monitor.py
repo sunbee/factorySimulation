@@ -36,9 +36,9 @@ def patch_resource(resource, pre=None, post=None):
 def get_monitor(data):
     """
     Query the attributes of the target resource with this callback.
-    Passed to patch_resource as argument pre= or post=, depending on
-    whether to execute the callback before or after the resource's
-    get/put or request/release method calls.
+    Usage: Passed to 'patch_resource()' as argument 'pre=' or 'post=', 
+    depending on whether to execute the callback before or after 
+    the resource's get/put or request/release method calls.
     """
     def monitor(resource):
         data.append((
@@ -50,15 +50,16 @@ def get_monitor(data):
 
 def help_monitor(resource_name, ts):
     """
-    Fix the gap with monkey-patching missing to record capacity allocated
-    to an entity that is served after a delay. This happens when an entity
-    is waiting in queue while another entity is being processed. 
-    Modifies the list that where data are logged from the monkey-patched 
-    resource. Call this function right after capacity is allocated,
-    i.e. right after 'yield req'. Compares the timestamp of capacity allocation 
-    with the timestamp of the most recent element on the list and if same, 
-    pops the item and puts it back after modification. 
-    Usage: Call after 'yield' statement following request for resource
+    Fix the gap with monkey-patching which does not resolve between 
+    capacity requested and capacity allocated when an entity is enqueued.
+    Modifies the list where the monkey-patched logs data upon state change.
+    The definition of state pertains to resource attributes:
+    1. Capacity in use
+    2. Requests in queue
+    Once capacity is allocated, compares the timestamp of lastest log entry
+    with time now. If a difference is noted, then pops the latest entry,
+    updates the record to reflect capacity allocated, and re-enters it in the log.
+    Usage: Call this function right after capacity allocated i.e. after 'yield req'. 
     """
     if (resource_name in G.resource_monitor) \
         and (G.resource_monitor.get(resource_name)[-1][0] == ts) \

@@ -1,10 +1,9 @@
-import resource
-from statistics import median
 import matplotlib.pyplot as plt
 import streamlit as st
 from triage_model import G, Patient, Process, gggauge, patch_resource, get_monitor
 import pandas as pd
 from plotnine import *
+from numpy import median
 
 st.title("Simply Simpy!")
 
@@ -32,7 +31,7 @@ with st.sidebar.container():
 st.subheader("Single Run: Summary")
 
 p = Process()
-p.monitor_capacity()
+#p.monitor_capacity()
 res = p.run_once(proc_monitor=True)
 st.write(res)
 
@@ -88,7 +87,7 @@ st.subheader("Multiple Runs: Performance Indicators")
 sim_results = []
 for i in range(0, sim_runs):
     p = Process()
-    p.monitor_capacity()
+    #p.monitor_capacity()
     sim_results.append(p.run_once())
 
 Capacity_Utilization = {}
