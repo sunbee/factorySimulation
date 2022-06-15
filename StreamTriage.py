@@ -1,5 +1,3 @@
-import resource
-from statistics import median
 import matplotlib.pyplot as plt
 import streamlit as st
 from triage_model import G, Patient, Process, gggauge, patch_resource, get_monitor
