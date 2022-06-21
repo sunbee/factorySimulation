@@ -3,14 +3,14 @@ from joblib import Parallel, delayed
 from triage_model import G, Process, Patient
 import time
 
-def simsome():
+def simsome(poll=False):
     G.verbose = False
     p = Process()
-    return p.run_once()
+    return p.run_once(proc_monitor=poll)
 
 def test_rig(n=19):
     tic = time.time()
-    outres = Parallel(n_jobs=-1)(delayed(simsome)() for i in range(n))
+    outres = Parallel(n_jobs=-1)(delayed(simsome)(poll=True) for i in range(n))
     toc = time.time()
     print("Took about {:.2f} secs for {} simulation runs".format(toc-tic, n))
     return outres
